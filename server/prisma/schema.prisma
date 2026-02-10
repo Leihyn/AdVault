@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADVERTISER
+  BOTH
+}
+
+enum DealStatus {
+  PENDING_PAYMENT
+  FUNDED
+  CREATIVE_PENDING
+  CREATIVE_SUBMITTED
+  CREATIVE_REVISION
+  CREATIVE_APPROVED
+  SCHEDULED
+  POSTED
+  VERIFIED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  DISPUTED
+  TIMED_OUT
+}
+
+enum AdFormatType {
+  POST
+  FORWARD
+  STORY
+  CUSTOM
+}
+
+enum CampaignStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum CreativeStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REVISION_REQUESTED
+}
+
+enum TransactionType {
+  DEPOSIT
+  RELEASE
+  REFUND
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  telegramId       BigInt    @unique @map("telegram_id")
+  username         String?
+  firstName        String?   @map("first_name")
+  role             UserRole  @default(ADVERTISER)
+  tonWalletAddress String?   @map("ton_wallet_address")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  channels         Channel[]
+  channelAdmins    ChannelAdmin[]
+  campaigns        Campaign[]
+  dealsAsAdvertiser Deal[]   @relation("advertiser_deals")
+  creatives        Creative[]
+  dealEvents       DealEvent[]
+
+  @@map("users")
+}
+
+model Channel {
+  id                Int       @id @default(autoincrement())
+  telegramChatId    BigInt    @unique @map("telegram_chat_id")
+  ownerId           Int       @map("owner_id")
+  title             String
+  description       String?
+  username          String?
+  subscribers       Int       @default(0)
+  avgViews          Int       @default(0) @map("avg_views")
+  avgReach          Int       @default(0) @map("avg_reach")
+  language          String?
+  category          String?
+  premiumPercentage Float     @default(0) @map("premium_percentage")
+  botIsAdmin        Boolean   @default(false) @map("bot_is_admin")
+  isVerified        Boolean   @default(false) @map("is_verified")
+  statsUpdatedAt    DateTime? @map("stats_updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  owner             User      @relation(fields: [ownerId], references: [id])
+  admins            ChannelAdmin[]
+  adFormats         AdFormat[]
+  deals             Deal[]
+  applications      CampaignApplication[]
+
+  @@map("channels")
+}
+
+model ChannelAdmin {
+  id              Int      @id @default(autoincrement())
+  channelId       Int      @map("channel_id")
+  userId          Int      @map("user_id")
+  canManageDeals  Boolean  @default(false) @map("can_manage_deals")
+  canManagePricing Boolean @default(false) @map("can_manage_pricing")
+  addedAt         DateTime @default(now()) @map("added_at")
+
+  channel         Channel  @relation(fields: [channelId], references: [id])
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@unique([channelId, userId])
+  @@map("channel_admins")
+}
+
+model AdFormat {
+  id          Int          @id @default(autoincrement())
+  channelId   Int          @map("channel_id")
+  formatType  AdFormatType @map("format_type")
+  label       String
+  description String?
+  priceTon    Float        @map("price_ton")
+  isActive    Boolean      @default(true) @map("is_active")
+
+  channel     Channel      @relation(fields: [channelId], references: [id])
+  deals       Deal[]
+
+  @@map("ad_formats")
+}
+
+model Campaign {
+  id                   Int            @id @default(autoincrement())
+  advertiserId         Int            @map("advertiser_id")
+  title                String
+  brief                String
+  budgetTon            Float          @map("budget_ton")
+  targetSubscribersMin Int?           @map("target_subscribers_min")
+  targetSubscribersMax Int?           @map("target_subscribers_max")
+  targetLanguage       String?        @map("target_language")
+  targetCategory       String?        @map("target_category")
+  status               CampaignStatus @default(ACTIVE)
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  advertiser           User           @relation(fields: [advertiserId], references: [id])
+  applications         CampaignApplication[]
+  deals                Deal[]
+
+  @@map("campaigns")
+}
+
+model CampaignApplication {
+  id              Int               @id @default(autoincrement())
+  campaignId      Int               @map("campaign_id")
+  channelId       Int               @map("channel_id")
+  proposedPriceTon Float            @map("proposed_price_ton")
+  message         String?
+  status          ApplicationStatus @default(PENDING)
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  campaign        Campaign          @relation(fields: [campaignId], references: [id])
+  channel         Channel           @relation(fields: [channelId], references: [id])
+
+  @@unique([campaignId, channelId])
+  @@map("campaign_applications")
+}
+
+model Deal {
+  id                    Int        @id @default(autoincrement())
+  channelId             Int        @map("channel_id")
+  advertiserId          Int        @map("advertiser_id")
+  adFormatId            Int        @map("ad_format_id")
+  campaignId            Int?       @map("campaign_id")
+  amountTon             Float      @map("amount_ton")
+  status                DealStatus @default(PENDING_PAYMENT)
+  ownerAlias            String     @map("owner_alias")
+  advertiserAlias       String     @map("advertiser_alias")
+  escrowAddress         String?    @map("escrow_address")
+  escrowMnemonicEncrypted String?  @map("escrow_mnemonic_encrypted")
+  scheduledPostAt       DateTime?  @map("scheduled_post_at")
+  postedMessageId       Int?       @map("posted_message_id")
+  postVerifiedAt        DateTime?  @map("post_verified_at")
+  timeoutAt             DateTime?  @map("timeout_at")
+  completedAt           DateTime?  @map("completed_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+
+  channel               Channel    @relation(fields: [channelId], references: [id])
+  advertiser            User       @relation("advertiser_deals", fields: [advertiserId], references: [id])
+  adFormat              AdFormat   @relation(fields: [adFormatId], references: [id])
+  campaign              Campaign?  @relation(fields: [campaignId], references: [id])
+  creatives             Creative[]
+  transactions          Transaction[]
+  events                DealEvent[]
+
+  @@map("deals")
+}
+
+model Creative {
+  id             Int            @id @default(autoincrement())
+  dealId         Int            @map("deal_id")
+  contentText    String?        @map("content_text")
+  mediaUrl       String?        @map("media_url")
+  mediaType      String?        @map("media_type")
+  version        Int            @default(1)
+  submittedById  Int            @map("submitted_by_id")
+  reviewerNotes  String?        @map("reviewer_notes")
+  status         CreativeStatus @default(DRAFT)
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  deal           Deal           @relation(fields: [dealId], references: [id])
+  submittedBy    User           @relation(fields: [submittedById], references: [id])
+
+  @@map("creatives")
+}
+
+model Transaction {
+  id            Int             @id @default(autoincrement())
+  dealId        Int             @map("deal_id")
+  type          TransactionType
+  amountTon     Float           @map("amount_ton")
+  txHash        String?         @map("tx_hash")
+  fromAddress   String?         @map("from_address")
+  toAddress     String?         @map("to_address")
+  confirmedAt   DateTime?       @map("confirmed_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  deal          Deal            @relation(fields: [dealId], references: [id])
+
+  @@map("transactions")
+}
+
+model DealEvent {
+  id         Int      @id @default(autoincrement())
+  dealId     Int      @map("deal_id")
+  eventType  String   @map("event_type")
+  oldStatus  String?  @map("old_status")
+  newStatus  String?  @map("new_status")
+  actorId    Int?     @map("actor_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  deal       Deal     @relation(fields: [dealId], references: [id])
+  actor      User?    @relation(fields: [actorId], references: [id])
+
+  @@map("deal_events")
+}
+
+model DealReceipt {
+  id              Int      @id @default(autoincrement())
+  dealId          Int      @unique @map("deal_id")
+  channelTitle    String   @map("channel_title")
+  advertiserAlias String   @map("advertiser_alias")
+  ownerAlias      String   @map("owner_alias")
+  amountTon       Float    @map("amount_ton")
+  finalStatus     String   @map("final_status")
+  dataHash        String   @map("data_hash")
+  completedAt     DateTime @map("completed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("deal_receipts")
+}
