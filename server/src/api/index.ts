@@ -8,6 +8,12 @@ import { statsRoutes } from './routes/stats.js';
 import { AppError } from '../utils/errors.js';
 import { ZodError } from 'zod';
 
+// BigInt cannot be serialized by JSON.stringify by default.
+// Prisma returns BigInt for fields like telegramId and telegramChatId.
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 export async function registerRoutes(app: FastifyInstance) {
   // Global error handler
   app.setErrorHandler((error, request, reply) => {

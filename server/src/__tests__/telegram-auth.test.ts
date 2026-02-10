@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'crypto';
 import { validateInitData } from '../utils/telegram.js';
+import { config } from '../config.js';
 
 /**
  * Helper to create valid Telegram initData for testing.
@@ -24,7 +25,7 @@ function createInitData(userData: object, overrides?: { authDate?: number; extra
     .join('\n');
 
   const secretKey = createHmac('sha256', 'WebAppData')
-    .update('test-bot-token-12345')
+    .update(config.BOT_TOKEN)
     .digest();
 
   const hash = createHmac('sha256', secretKey)
@@ -98,7 +99,7 @@ describe('Telegram initData Validation', () => {
 
     const checkString = `auth_date=${authDate}`;
     const secretKey = createHmac('sha256', 'WebAppData')
-      .update('test-bot-token-12345')
+      .update(config.BOT_TOKEN)
       .digest();
     const hash = createHmac('sha256', secretKey)
       .update(checkString)

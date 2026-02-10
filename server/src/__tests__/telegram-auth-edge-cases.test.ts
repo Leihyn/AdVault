@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'crypto';
 import { validateInitData } from '../utils/telegram.js';
+import { config } from '../config.js';
 
 /**
  * Helper: creates properly signed initData for testing.
  */
 function signInitData(
   params: URLSearchParams,
-  botToken: string = 'test-bot-token-12345',
+  botToken: string = config.BOT_TOKEN,
 ): string {
   const checkString = Array.from(params.entries())
     .sort(([a], [b]) => a.localeCompare(b))

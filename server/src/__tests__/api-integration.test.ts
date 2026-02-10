@@ -3,6 +3,7 @@ import { createHmac } from 'crypto';
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { registerRoutes } from '../api/index.js';
+import { config } from '../config.js';
 
 function createValidInitData(userId: number = 123456789) {
   const user = { id: userId, first_name: 'Test', username: 'testuser' };
@@ -17,7 +18,7 @@ function createValidInitData(userId: number = 123456789) {
     .join('\n');
 
   const secretKey = createHmac('sha256', 'WebAppData')
-    .update('test-bot-token-12345')
+    .update(config.BOT_TOKEN)
     .digest();
   const hash = createHmac('sha256', secretKey).update(checkString).digest('hex');
   params.set('hash', hash);
