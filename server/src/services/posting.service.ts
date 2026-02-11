@@ -4,16 +4,17 @@ import { transitionDeal } from './deal.service.js';
 const prisma = new PrismaClient();
 
 /**
- * Posts the approved creative to the target channel via the bot.
- * Called by the posting worker at the scheduled time.
- *
- * The bot reference is injected by the worker - this service
- * just handles the DB state transitions.
+ * Marks a deal as posted — stores the messageId and the exact timestamp.
+ * postedAt is used by the verification worker to compute the hold period
+ * (instead of updatedAt which can shift on unrelated updates).
  */
-export async function markAsPosted(dealId: number, messageId: number) {
+export async function markAsPosted(dealId: number, messageId: string) {
   await prisma.deal.update({
     where: { id: dealId },
-    data: { postedMessageId: messageId },
+    data: {
+      postedMessageId: messageId,
+      postedAt: new Date(),
+    },
   });
 
   await transitionDeal(dealId, 'POSTED');
@@ -21,8 +22,6 @@ export async function markAsPosted(dealId: number, messageId: number) {
 
 /**
  * Marks a deal as verified after the hold period.
- * The verification worker calls this after confirming the post
- * is still intact (not deleted/edited).
  */
 export async function markAsVerified(dealId: number) {
   await prisma.deal.update({

@@ -1,45 +1,43 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Tabbar, FixedLayout } from '@telegram-apps/telegram-ui';
+import { IconHome, IconChannels, IconCampaigns, IconDeals, IconProfile } from './Icons.js';
+import { useBackButton } from '../hooks/useBackButton.js';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Home' },
-  { path: '/channels', label: 'Channels' },
-  { path: '/campaigns', label: 'Campaigns' },
-  { path: '/deals', label: 'Deals' },
-  { path: '/profile', label: 'Profile' },
+  { path: '/', label: 'Home', Icon: IconHome },
+  { path: '/channels', label: 'Channels', Icon: IconChannels },
+  { path: '/campaigns', label: 'Campaigns', Icon: IconCampaigns },
+  { path: '/deals', label: 'Deals', Icon: IconDeals },
+  { path: '/profile', label: 'Profile', Icon: IconProfile },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  useBackButton();
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <main style={{ flex: 1, padding: '16px' }}>{children}</main>
-      <nav style={{
-        display: 'flex',
-        borderTop: '1px solid var(--tg-theme-hint-color, #ccc)',
-        backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-      }}>
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            style={{
-              flex: 1,
-              textAlign: 'center',
-              padding: '12px 4px',
-              fontSize: '12px',
-              textDecoration: 'none',
-              color: location.pathname === item.path
-                ? 'var(--tg-theme-button-color, #3390ec)'
-                : 'var(--tg-theme-hint-color, #999)',
-              fontWeight: location.pathname === item.path ? 600 : 400,
-            }}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <main style={{ flex: 1, paddingBottom: '80px' }}>{children}</main>
+      <FixedLayout style={{ zIndex: 100 }}>
+        <Tabbar>
+          {NAV_ITEMS.map((item) => (
+            <Tabbar.Item
+              key={item.path}
+              text={item.label}
+              selected={
+                item.path === '/'
+                  ? location.pathname === '/'
+                  : location.pathname.startsWith(item.path)
+              }
+              onClick={() => navigate(item.path)}
+            >
+              <item.Icon />
+            </Tabbar.Item>
+          ))}
+        </Tabbar>
+      </FixedLayout>
     </div>
   );
 }

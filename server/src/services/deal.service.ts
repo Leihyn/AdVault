@@ -1,6 +1,7 @@
-import { PrismaClient, DealStatus } from '@prisma/client';
+import { PrismaClient, DealStatus, Prisma } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { generateAlias } from '../utils/privacy.js';
+import { toDecimal } from '../utils/decimal.js';
 
 const prisma = new PrismaClient();
 
@@ -45,7 +46,13 @@ export async function createDeal(data: {
 
   const deal = await prisma.deal.create({
     data: {
-      ...data,
+      channelId: data.channelId,
+      advertiserId: data.advertiserId,
+      adFormatId: data.adFormatId,
+      campaignId: data.campaignId,
+      amountTon: toDecimal(data.amountTon),
+      escrowAddress: data.escrowAddress,
+      escrowMnemonicEncrypted: data.escrowMnemonicEncrypted,
       ownerAlias: generateAlias('Seller'),
       advertiserAlias: generateAlias('Buyer'),
       status: 'PENDING_PAYMENT',
@@ -61,7 +68,7 @@ export async function getDeal(id: number, requestingUserId?: number) {
   const deal = await prisma.deal.findUnique({
     where: { id },
     include: {
-      channel: { select: { id: true, title: true, username: true, telegramChatId: true, ownerId: true } },
+      channel: { select: { id: true, title: true, username: true, telegramChatId: true, platform: true, platformChannelId: true, ownerId: true } },
       advertiser: { select: { id: true, username: true, firstName: true, tonWalletAddress: true } },
       adFormat: true,
       campaign: { select: { id: true, title: true } },
@@ -72,10 +79,14 @@ export async function getDeal(id: number, requestingUserId?: number) {
   });
   if (!deal) throw new NotFoundError('Deal');
 
-  // Mask identities: each party sees their own info + alias for the other
+  // Verify the requesting user is a party to the deal
   if (requestingUserId) {
     const isAdvertiser = deal.advertiserId === requestingUserId;
     const isOwner = deal.channel.ownerId === requestingUserId;
+
+    if (!isAdvertiser && !isOwner) {
+      throw new ForbiddenError('Not a party to this deal');
+    }
 
     if (isAdvertiser && !isOwner) {
       // Advertiser sees owner as alias, strip owner's real identity
@@ -124,51 +135,66 @@ export async function getUserDeals(userId: number, role?: 'owner' | 'advertiser'
   });
 }
 
+/**
+ * Atomically transitions a deal's status using row-level locking.
+ * Uses a Prisma interactive transaction with SELECT ... FOR UPDATE
+ * to prevent concurrent workers from racing on the same deal.
+ */
 export async function transitionDeal(
   dealId: number,
   newStatus: DealStatus,
   actorId?: number,
   metadata?: Record<string, any>,
 ) {
-  const deal = await prisma.deal.findUnique({ where: { id: dealId } });
-  if (!deal) throw new NotFoundError('Deal');
+  return prisma.$transaction(async (tx) => {
+    // Row-level lock: prevents concurrent transitions on the same deal
+    const [deal] = await tx.$queryRaw<Array<{ id: number; status: string }>>`
+      SELECT id, status FROM deals WHERE id = ${dealId} FOR UPDATE
+    `;
+    if (!deal) throw new NotFoundError('Deal');
 
-  const allowed = VALID_TRANSITIONS[deal.status];
-  if (!allowed.includes(newStatus)) {
-    throw new AppError(
-      `Cannot transition from ${deal.status} to ${newStatus}`,
-    );
-  }
+    const currentStatus = deal.status as DealStatus;
+    const allowed = VALID_TRANSITIONS[currentStatus];
+    if (!allowed.includes(newStatus)) {
+      throw new AppError(
+        `Cannot transition from ${currentStatus} to ${newStatus}`,
+      );
+    }
 
-  // Calculate new timeout if applicable
-  const timeoutHours = STATUS_TIMEOUTS[newStatus];
-  const timeoutAt = timeoutHours
-    ? new Date(Date.now() + timeoutHours * 60 * 60 * 1000)
-    : null;
+    // Calculate new timeout if applicable
+    const timeoutHours = STATUS_TIMEOUTS[newStatus];
+    const timeoutAt = timeoutHours
+      ? new Date(Date.now() + timeoutHours * 60 * 60 * 1000)
+      : null;
 
-  // Track when deal reaches a terminal state (for auto-purge scheduling)
-  const terminalStatuses: DealStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'TIMED_OUT'];
-  const completedAt = terminalStatuses.includes(newStatus) ? new Date() : undefined;
+    // Track when deal reaches a terminal state (for auto-purge scheduling)
+    const terminalStatuses: DealStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'TIMED_OUT'];
+    const completedAt = terminalStatuses.includes(newStatus) ? new Date() : undefined;
 
-  const updated = await prisma.deal.update({
-    where: { id: dealId },
-    data: {
-      status: newStatus,
-      timeoutAt,
-      ...(completedAt && { completedAt }),
-    },
+    const updated = await tx.deal.update({
+      where: { id: dealId },
+      data: {
+        status: newStatus,
+        timeoutAt,
+        ...(completedAt && { completedAt }),
+      },
+    });
+
+    await tx.dealEvent.create({
+      data: {
+        dealId,
+        eventType: `STATUS_${newStatus}`,
+        oldStatus: currentStatus,
+        newStatus,
+        actorId: actorId || null,
+        metadata: metadata || undefined,
+      },
+    });
+
+    return updated;
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
   });
-
-  await createDealEvent(
-    dealId,
-    `STATUS_${newStatus}`,
-    deal.status,
-    newStatus,
-    actorId || null,
-    metadata,
-  );
-
-  return updated;
 }
 
 export async function cancelDeal(dealId: number, userId: number) {
@@ -271,6 +297,17 @@ export async function getPostedDeals() {
       channel: true,
     },
   });
+}
+
+/** Get deal receipt (proof of completion after purge) */
+export async function getDealReceipt(dealId: number) {
+  const receipt = await prisma.dealReceipt.findUnique({
+    where: { dealId },
+  });
+  if (!receipt) {
+    return { purged: false, message: 'Deal data still available or deal not found' };
+  }
+  return { purged: true, receipt };
 }
 
 async function createDealEvent(

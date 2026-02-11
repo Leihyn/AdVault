@@ -72,14 +72,14 @@ describe('Zod Schemas — Edge Cases', () => {
       expect(result.success).toBe(false);
     });
 
-    it('accepts Infinity for amountTon (z.number().positive() has no finite check)', () => {
+    it('rejects Infinity for amountTon (max 1_000_000)', () => {
       const result = createDealSchema.safeParse({
         channelId: 1,
         adFormatId: 1,
         amountTon: Infinity,
       });
-      // Infinity > 0 is true, so .positive() accepts it
-      expect(result.success).toBe(true);
+      // .max(1_000_000) rejects Infinity
+      expect(result.success).toBe(false);
     });
 
     it('rejects -Infinity for amountTon', () => {
@@ -102,13 +102,13 @@ describe('Zod Schemas — Edge Cases', () => {
       if (result.success) expect(result.data.amountTon).toBeCloseTo(0.000001);
     });
 
-    it('accepts very large amountTon (no upper bound)', () => {
+    it('rejects very large amountTon (max 1_000_000)', () => {
       const result = createDealSchema.safeParse({
         channelId: 1,
         adFormatId: 1,
         amountTon: 999999999,
       });
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
 
     it('rejects float channelId (int required)', () => {
@@ -129,13 +129,13 @@ describe('Zod Schemas — Edge Cases', () => {
       expect(result.success).toBe(false);
     });
 
-    it('accepts very large priceTon for ad format', () => {
+    it('rejects very large priceTon for ad format (max 1_000_000)', () => {
       const result = addAdFormatSchema.safeParse({
         formatType: 'POST',
         label: 'Expensive',
         priceTon: 1e15,
       });
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
 
     it('rejects NaN for priceTon', () => {
@@ -158,37 +158,29 @@ describe('Zod Schemas — Edge Cases', () => {
 
   // ==================== Pagination bounds ====================
   describe('pagination edge cases', () => {
-    it('accepts page = 0 (no positive constraint)', () => {
+    it('rejects page = 0 (positive constraint)', () => {
       const result = paginationSchema.safeParse({ page: 0 });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.page).toBe(0);
+      expect(result.success).toBe(false);
     });
 
-    it('accepts negative page', () => {
+    it('rejects negative page', () => {
       const result = paginationSchema.safeParse({ page: -1 });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.page).toBe(-1);
+      expect(result.success).toBe(false);
     });
 
-    it('accepts limit = 0', () => {
+    it('rejects limit = 0 (positive constraint)', () => {
       const result = paginationSchema.safeParse({ limit: 0 });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.limit).toBe(0);
+      expect(result.success).toBe(false);
     });
 
-    it('accepts very large limit (no max constraint)', () => {
+    it('rejects very large limit (max 100)', () => {
       const result = paginationSchema.safeParse({ limit: 1000000 });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.limit).toBe(1000000);
+      expect(result.success).toBe(false);
     });
 
-    it('coerces string "0" to number 0', () => {
+    it('rejects coerced string "0" (0 is not positive)', () => {
       const result = paginationSchema.safeParse({ page: '0', limit: '0' });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.page).toBe(0);
-        expect(result.data.limit).toBe(0);
-      }
+      expect(result.success).toBe(false);
     });
 
     it('rejects NaN-producing string ("abc")', () => {
@@ -481,14 +473,14 @@ describe('Zod Schemas — Edge Cases', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts negative targetSubscribersMin', () => {
+    it('rejects negative targetSubscribersMin (nonnegative constraint)', () => {
       const result = createCampaignSchema.safeParse({
         title: 'Test',
         brief: 'Brief',
         budgetTon: 100,
         targetSubscribersMin: -100,
       });
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
 
     it('rejects DRAFT as campaign status', () => {
@@ -519,9 +511,10 @@ describe('Zod Schemas — Edge Cases', () => {
       expect(result.success).toBe(true);
     });
 
-    it('rejects invalid role', () => {
+    it('strips unknown fields like role', () => {
       const result = updateUserSchema.safeParse({ role: 'SUPERADMIN' });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      if (result.success) expect((result.data as any).role).toBeUndefined();
     });
   });
 
@@ -559,29 +552,24 @@ describe('Zod Schemas — Edge Cases', () => {
       if (result.success) expect(result.data.page).toBe(1);
     });
 
-    it('coerces boolean "false" for page', () => {
+    it('rejects boolean false for page (coerces to 0, not positive)', () => {
       const result = paginationSchema.safeParse({ page: false });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.page).toBe(0);
+      expect(result.success).toBe(false);
     });
 
-    it('coerces null to 0 for coerce.number', () => {
+    it('rejects null for page (coerces to 0, not positive)', () => {
       const result = paginationSchema.safeParse({ page: null });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.page).toBe(0);
+      expect(result.success).toBe(false);
     });
 
-    it('coerces empty string to NaN for page', () => {
+    it('rejects empty string for page (coerces to 0, not positive)', () => {
       const result = paginationSchema.safeParse({ page: '' });
-      expect(result.success).toBe(true);
-      // Number('') === 0 in JS
-      if (result.success) expect(result.data.page).toBe(0);
+      expect(result.success).toBe(false);
     });
 
-    it('channel filters: coerces negative string for subscribers', () => {
+    it('rejects negative string for minSubscribers (nonnegative constraint)', () => {
       const result = channelFiltersSchema.safeParse({ minSubscribers: '-500' });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.minSubscribers).toBe(-500);
+      expect(result.success).toBe(false);
     });
   });
 });

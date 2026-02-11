@@ -78,15 +78,15 @@ describe('Telegram initData Validation', () => {
     expect(result).toBeNull();
   });
 
-  it('rejects expired auth_date (older than 24h)', () => {
-    const oldDate = Math.floor(Date.now() / 1000) - 90000; // 25 hours ago
+  it('rejects expired auth_date (older than 5 minutes)', () => {
+    const oldDate = Math.floor(Date.now() / 1000) - 600; // 10 minutes ago
     const initData = createInitData(validUser, { authDate: oldDate });
     const result = validateInitData(initData);
     expect(result).toBeNull();
   });
 
-  it('accepts auth_date within 24h window', () => {
-    const recentDate = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+  it('accepts auth_date within 5-minute window', () => {
+    const recentDate = Math.floor(Date.now() / 1000) - 120; // 2 minutes ago
     const initData = createInitData(validUser, { authDate: recentDate });
     const result = validateInitData(initData);
     expect(result).not.toBeNull();

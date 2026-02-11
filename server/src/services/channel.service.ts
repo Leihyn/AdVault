@@ -1,9 +1,10 @@
-import { PrismaClient, AdFormatType } from '@prisma/client';
+import { PrismaClient, AdFormatType, Platform } from '@prisma/client';
 import { NotFoundError, ForbiddenError, ConflictError } from '../utils/errors.js';
 
 const prisma = new PrismaClient();
 
 export interface ChannelFilters {
+  platform?: Platform;
   minSubscribers?: number;
   maxSubscribers?: number;
   language?: string;
@@ -15,6 +16,7 @@ export interface ChannelFilters {
 export async function listChannels(filters: ChannelFilters, page = 1, limit = 20) {
   const where: any = { isVerified: true };
 
+  if (filters.platform) where.platform = filters.platform;
   if (filters.minSubscribers) where.subscribers = { ...where.subscribers, gte: filters.minSubscribers };
   if (filters.maxSubscribers) where.subscribers = { ...where.subscribers, lte: filters.maxSubscribers };
   if (filters.language) where.language = filters.language;
@@ -53,7 +55,9 @@ export async function getChannel(id: number) {
 }
 
 export async function createChannel(data: {
-  telegramChatId: bigint;
+  platform?: Platform;
+  platformChannelId?: string;
+  telegramChatId?: bigint;
   ownerId: number;
   title: string;
   description?: string;
@@ -64,12 +68,34 @@ export async function createChannel(data: {
   language?: string;
   category?: string;
 }) {
+  const platform = data.platform || 'TELEGRAM';
+
+  // For Telegram channels, derive platformChannelId from telegramChatId if not provided
+  const platformChannelId = data.platformChannelId
+    || (data.telegramChatId != null ? String(data.telegramChatId) : '');
+
+  // Check for duplicate on composite (platform, platformChannelId)
   const existing = await prisma.channel.findUnique({
-    where: { telegramChatId: data.telegramChatId },
+    where: { platform_platformChannelId: { platform, platformChannelId } },
   });
   if (existing) throw new ConflictError('Channel already registered');
 
-  return prisma.channel.create({ data });
+  return prisma.channel.create({
+    data: {
+      platform,
+      platformChannelId,
+      telegramChatId: data.telegramChatId || (platform === 'TELEGRAM' ? BigInt(platformChannelId) : null),
+      ownerId: data.ownerId,
+      title: data.title,
+      description: data.description,
+      username: data.username,
+      subscribers: data.subscribers,
+      avgViews: data.avgViews,
+      avgReach: data.avgReach,
+      language: data.language,
+      category: data.category,
+    },
+  });
 }
 
 export async function updateChannel(

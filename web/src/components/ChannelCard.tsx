@@ -1,5 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Cell, Avatar, Text, Chip } from '@telegram-apps/telegram-ui';
+import { PlatformIcon } from './Icons.js';
 
 interface Props {
   channel: {
@@ -10,46 +12,41 @@ interface Props {
     avgViews: number;
     language?: string;
     category?: string;
+    platform?: string;
     adFormats: { label: string; priceTon: number }[];
   };
 }
 
 export function ChannelCard({ channel }: Props) {
+  const navigate = useNavigate();
   const minPrice = channel.adFormats.length > 0
     ? Math.min(...channel.adFormats.map((f) => f.priceTon))
     : null;
 
+  const platform = channel.platform || 'TELEGRAM';
+  const descParts = [];
+  if (platform !== 'TELEGRAM') descParts.push(platform.charAt(0) + platform.slice(1).toLowerCase());
+  if (channel.language) descParts.push(channel.language.toUpperCase());
+  if (channel.category) descParts.push(channel.category);
+
   return (
-    <Link
-      to={`/channels/${channel.id}`}
-      style={{
-        display: 'block',
-        padding: '12px',
-        marginBottom: '8px',
-        borderRadius: '12px',
-        backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-        textDecoration: 'none',
-        color: 'var(--tg-theme-text-color, #000)',
-      }}
-    >
-      <div style={{ fontWeight: 600, fontSize: '16px' }}>
-        {channel.title}
-        {channel.username && (
-          <span style={{ color: 'var(--tg-theme-hint-color, #999)', fontWeight: 400, fontSize: '14px' }}>
-            {' '}@{channel.username}
-          </span>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '13px', color: 'var(--tg-theme-hint-color, #999)' }}>
-        <span>{channel.subscribers.toLocaleString()} subs</span>
-        <span>{channel.avgViews.toLocaleString()} avg views</span>
-        {channel.language && <span>{channel.language.toUpperCase()}</span>}
-      </div>
-      {minPrice !== null && (
-        <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 500, color: 'var(--tg-theme-link-color, #3390ec)' }}>
-          From {minPrice} TON
+    <Cell
+      onClick={() => navigate(`/channels/${channel.id}`)}
+      before={
+        <div style={{ position: 'relative' }}>
+          <Avatar size={48} acronym={channel.title.charAt(0)} />
+          {platform !== 'TELEGRAM' && (
+            <div style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--tgui--bg_color)', borderRadius: '50%', padding: 2 }}>
+              <PlatformIcon platform={platform} />
+            </div>
+          )}
         </div>
-      )}
-    </Link>
+      }
+      subtitle={`${channel.subscribers.toLocaleString()} subs \u00B7 ${channel.avgViews.toLocaleString()} avg views`}
+      after={minPrice !== null ? <Chip mode="mono">{minPrice} TON</Chip> : undefined}
+      description={descParts.join(' \u00B7 ') || undefined}
+    >
+      {channel.title}
+    </Cell>
   );
 }

@@ -30,11 +30,22 @@ enum DealStatus {
   TIMED_OUT
 }
 
+enum Platform {
+  TELEGRAM
+  YOUTUBE
+  INSTAGRAM
+  TWITTER
+}
+
 enum AdFormatType {
   POST
   FORWARD
   STORY
   CUSTOM
+  VIDEO
+  REEL
+  TWEET
+  COMMUNITY_POST
 }
 
 enum CampaignStatus {
@@ -84,7 +95,9 @@ model User {
 
 model Channel {
   id                Int       @id @default(autoincrement())
-  telegramChatId    BigInt    @unique @map("telegram_chat_id")
+  platform          Platform  @default(TELEGRAM)
+  platformChannelId String    @map("platform_channel_id") @default("")
+  telegramChatId    BigInt?   @unique @map("telegram_chat_id")
   ownerId           Int       @map("owner_id")
   title             String
   description       String?
@@ -94,18 +107,21 @@ model Channel {
   avgReach          Int       @default(0) @map("avg_reach")
   language          String?
   category          String?
-  premiumPercentage Float     @default(0) @map("premium_percentage")
+  premiumPercentage Decimal   @default(0) @map("premium_percentage") @db.Decimal(10, 4)
   botIsAdmin        Boolean   @default(false) @map("bot_is_admin")
   isVerified        Boolean   @default(false) @map("is_verified")
   statsUpdatedAt    DateTime? @map("stats_updated_at")
   createdAt         DateTime  @default(now()) @map("created_at")
 
-  owner             User      @relation(fields: [ownerId], references: [id])
+  owner             User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   admins            ChannelAdmin[]
   adFormats         AdFormat[]
   deals             Deal[]
   applications      CampaignApplication[]
 
+  @@unique([platform, platformChannelId])
+  @@index([ownerId])
+  @@index([platform])
   @@map("channels")
 }
 
@@ -117,10 +133,11 @@ model ChannelAdmin {
   canManagePricing Boolean @default(false) @map("can_manage_pricing")
   addedAt         DateTime @default(now()) @map("added_at")
 
-  channel         Channel  @relation(fields: [channelId], references: [id])
-  user            User     @relation(fields: [userId], references: [id])
+  channel         Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([channelId, userId])
+  @@index([userId])
   @@map("channel_admins")
 }
 
@@ -130,12 +147,13 @@ model AdFormat {
   formatType  AdFormatType @map("format_type")
   label       String
   description String?
-  priceTon    Float        @map("price_ton")
+  priceTon    Decimal      @map("price_ton") @db.Decimal(18, 9)
   isActive    Boolean      @default(true) @map("is_active")
 
-  channel     Channel      @relation(fields: [channelId], references: [id])
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
   deals       Deal[]
 
+  @@index([channelId])
   @@map("ad_formats")
 }
 
@@ -144,7 +162,7 @@ model Campaign {
   advertiserId         Int            @map("advertiser_id")
   title                String
   brief                String
-  budgetTon            Float          @map("budget_ton")
+  budgetTon            Decimal        @map("budget_ton") @db.Decimal(18, 9)
   targetSubscribersMin Int?           @map("target_subscribers_min")
   targetSubscribersMax Int?           @map("target_subscribers_max")
   targetLanguage       String?        @map("target_language")
@@ -152,10 +170,12 @@ model Campaign {
   status               CampaignStatus @default(ACTIVE)
   createdAt            DateTime       @default(now()) @map("created_at")
 
-  advertiser           User           @relation(fields: [advertiserId], references: [id])
+  advertiser           User           @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
   applications         CampaignApplication[]
   deals                Deal[]
 
+  @@index([advertiserId])
+  @@index([status])
   @@map("campaigns")
 }
 
@@ -163,15 +183,16 @@ model CampaignApplication {
   id              Int               @id @default(autoincrement())
   campaignId      Int               @map("campaign_id")
   channelId       Int               @map("channel_id")
-  proposedPriceTon Float            @map("proposed_price_ton")
+  proposedPriceTon Decimal          @map("proposed_price_ton") @db.Decimal(18, 9)
   message         String?
   status          ApplicationStatus @default(PENDING)
   createdAt       DateTime          @default(now()) @map("created_at")
 
-  campaign        Campaign          @relation(fields: [campaignId], references: [id])
-  channel         Channel           @relation(fields: [channelId], references: [id])
+  campaign        Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  channel         Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, channelId])
+  @@index([channelId])
   @@map("campaign_applications")
 }
 
@@ -181,28 +202,36 @@ model Deal {
   advertiserId          Int        @map("advertiser_id")
   adFormatId            Int        @map("ad_format_id")
   campaignId            Int?       @map("campaign_id")
-  amountTon             Float      @map("amount_ton")
+  amountTon             Decimal    @map("amount_ton") @db.Decimal(18, 9)
   status                DealStatus @default(PENDING_PAYMENT)
   ownerAlias            String     @map("owner_alias")
   advertiserAlias       String     @map("advertiser_alias")
   escrowAddress         String?    @map("escrow_address")
   escrowMnemonicEncrypted String?  @map("escrow_mnemonic_encrypted")
   scheduledPostAt       DateTime?  @map("scheduled_post_at")
-  postedMessageId       Int?       @map("posted_message_id")
+  postedMessageId       String?    @map("posted_message_id")
+  postedAt              DateTime?  @map("posted_at")
   postVerifiedAt        DateTime?  @map("post_verified_at")
   timeoutAt             DateTime?  @map("timeout_at")
   completedAt           DateTime?  @map("completed_at")
   createdAt             DateTime   @default(now()) @map("created_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
 
-  channel               Channel    @relation(fields: [channelId], references: [id])
-  advertiser            User       @relation("advertiser_deals", fields: [advertiserId], references: [id])
+  channel               Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  advertiser            User       @relation("advertiser_deals", fields: [advertiserId], references: [id], onDelete: Cascade)
   adFormat              AdFormat   @relation(fields: [adFormatId], references: [id])
-  campaign              Campaign?  @relation(fields: [campaignId], references: [id])
+  campaign              Campaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   creatives             Creative[]
   transactions          Transaction[]
   events                DealEvent[]
+  pendingTransfers      PendingTransfer[]
 
+  @@index([channelId])
+  @@index([advertiserId])
+  @@index([adFormatId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([timeoutAt])
   @@map("deals")
 }
 
@@ -218,9 +247,11 @@ model Creative {
   status         CreativeStatus @default(DRAFT)
   createdAt      DateTime       @default(now()) @map("created_at")
 
-  deal           Deal           @relation(fields: [dealId], references: [id])
+  deal           Deal           @relation(fields: [dealId], references: [id], onDelete: Cascade)
   submittedBy    User           @relation(fields: [submittedById], references: [id])
 
+  @@index([dealId])
+  @@index([submittedById])
   @@map("creatives")
 }
 
@@ -228,15 +259,16 @@ model Transaction {
   id            Int             @id @default(autoincrement())
   dealId        Int             @map("deal_id")
   type          TransactionType
-  amountTon     Float           @map("amount_ton")
+  amountTon     Decimal         @map("amount_ton") @db.Decimal(18, 9)
   txHash        String?         @map("tx_hash")
   fromAddress   String?         @map("from_address")
   toAddress     String?         @map("to_address")
   confirmedAt   DateTime?       @map("confirmed_at")
   createdAt     DateTime        @default(now()) @map("created_at")
 
-  deal          Deal            @relation(fields: [dealId], references: [id])
+  deal          Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
+  @@index([dealId])
   @@map("transactions")
 }
 
@@ -250,9 +282,10 @@ model DealEvent {
   metadata   Json?
   createdAt  DateTime @default(now()) @map("created_at")
 
-  deal       Deal     @relation(fields: [dealId], references: [id])
-  actor      User?    @relation(fields: [actorId], references: [id])
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
+  @@index([dealId])
   @@map("deal_events")
 }
 
@@ -262,11 +295,34 @@ model DealReceipt {
   channelTitle    String   @map("channel_title")
   advertiserAlias String   @map("advertiser_alias")
   ownerAlias      String   @map("owner_alias")
-  amountTon       Float    @map("amount_ton")
+  amountTon       Decimal  @map("amount_ton") @db.Decimal(18, 9)
   finalStatus     String   @map("final_status")
   dataHash        String   @map("data_hash")
   completedAt     DateTime @map("completed_at")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@map("deal_receipts")
+}
+
+/// Tracks in-flight two-hop transfers for saga recovery.
+/// If hop 1 (escrow→master) succeeds but hop 2 (master→recipient) fails,
+/// the recovery worker retries hop 2 using this record.
+model PendingTransfer {
+  id            Int      @id @default(autoincrement())
+  dealId        Int      @map("deal_id")
+  type          TransactionType
+  recipientAddress String @map("recipient_address")
+  amountTon     Decimal  @map("amount_ton") @db.Decimal(18, 9)
+  hop1TxId      String?  @map("hop1_tx_id")
+  hop2TxId      String?  @map("hop2_tx_id")
+  retries       Int      @default(0)
+  lastError     String?  @map("last_error")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  deal          Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@index([completedAt])
+  @@map("pending_transfers")
 }

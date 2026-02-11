@@ -1,9 +1,29 @@
 const API_BASE = '/api';
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+const REQUEST_TIMEOUT_MS = 15000;
+
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 function getInitData(): string {
   return window.Telegram?.WebApp?.initData || '';
 }
 
+/** Delay helper */
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Retryable request with timeout and exponential backoff */
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -15,22 +35,56 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['x-telegram-init-data'] = initData;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const isIdempotent = !options.method || options.method === 'GET';
+  const retries = isIdempotent ? MAX_RETRIES : 0;
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(body.message || `Request failed: ${res.status}`);
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new ApiError(
+          body.message || `Request failed: ${res.status}`,
+          res.status,
+          body.error,
+        );
+      }
+
+      return res.json();
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Don't retry client errors (4xx) — only network/server errors
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        throw error;
+      }
+
+      if (attempt < retries) {
+        await delay(RETRY_DELAY_MS * Math.pow(2, attempt));
+      }
+    }
   }
 
-  return res.json();
+  throw lastError || new Error('Request failed');
 }
 
 // --- Channels ---
 export function fetchChannels(params?: Record<string, string>) {
-  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  const filtered = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v)) : undefined;
+  const qs = filtered && Object.keys(filtered).length ? '?' + new URLSearchParams(filtered).toString() : '';
   return request<any>(`/channels${qs}`);
 }
 

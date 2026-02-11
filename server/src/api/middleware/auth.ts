@@ -6,14 +6,18 @@ import { config } from '../../config.js';
 
 const prisma = new PrismaClient();
 
+interface AuthUser {
+  id: number;
+  telegramId: bigint;
+  username?: string;
+  firstName?: string;
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
-    telegramUser: {
-      id: number;
-      telegramId: bigint;
-      username?: string;
-      firstName?: string;
-    };
+    telegramUser: AuthUser;
+    /** Platform-agnostic alias for telegramUser */
+    user: AuthUser;
   }
 }
 
@@ -23,12 +27,14 @@ declare module 'fastify' {
  * Attaches the user to request.telegramUser.
  */
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-  // In development, allow a header-based bypass for testing
-  if (config.NODE_ENV === 'development') {
-    const devUserId = request.headers['x-dev-user-id'];
-    if (devUserId) {
+  // Dev bypass: requires BOTH development mode AND an explicit secret.
+  // The secret prevents accidental exploitation if NODE_ENV is misconfigured.
+  if (config.NODE_ENV === 'development' && config.DEV_BYPASS_SECRET) {
+    const devSecret = request.headers['x-dev-secret'] as string;
+    const devUserId = request.headers['x-dev-user-id'] as string;
+    if (devSecret && devUserId && devSecret === config.DEV_BYPASS_SECRET) {
       const user = await prisma.user.findUnique({
-        where: { telegramId: BigInt(devUserId as string) },
+        where: { telegramId: BigInt(devUserId) },
       });
       if (user) {
         request.telegramUser = {
@@ -37,6 +43,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
           username: user.username || undefined,
           firstName: user.firstName || undefined,
         };
+        request.user = request.telegramUser;
         return;
       }
     }
@@ -72,4 +79,5 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
     username: user.username || undefined,
     firstName: user.firstName || undefined,
   };
+  request.user = request.telegramUser;
 }

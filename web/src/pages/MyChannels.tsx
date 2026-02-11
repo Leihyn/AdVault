@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Section, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
 import { fetchMyChannels } from '../api/client.js';
 import { ChannelCard } from '../components/ChannelCard.js';
 
@@ -11,15 +12,29 @@ export function MyChannels() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '12px' }}>My Channels</h1>
-      {isLoading && <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading...</p>}
-      {channels?.map((channel: any) => (
-        <ChannelCard key={channel.id} channel={channel} />
-      ))}
-      {channels?.length === 0 && (
-        <p style={{ color: 'var(--tg-theme-hint-color)', textAlign: 'center', marginTop: '32px' }}>
-          No channels yet. Use the bot to register a channel with /addchannel.
-        </p>
+      <div className="page-header">
+        <Title level="2" weight="1">My Channels</Title>
+        <Text style={{ color: 'var(--tgui--hint_color)' }}>
+          {channels?.length !== undefined ? `${channels.length} registered` : 'Channels you own'}
+        </Text>
+      </div>
+      {isLoading && (
+        <Placeholder>
+          <Spinner size="m" />
+        </Placeholder>
+      )}
+      {channels?.length > 0 && (
+        <Section>
+          {channels.map((channel: any) => (
+            <ChannelCard key={channel.id} channel={channel} />
+          ))}
+        </Section>
+      )}
+      {!isLoading && channels?.length === 0 && (
+        <Placeholder
+          header="No channels yet"
+          description="Use the bot to register a channel with /addchannel."
+        />
       )}
     </div>
   );

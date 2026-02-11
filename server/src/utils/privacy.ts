@@ -56,7 +56,7 @@ export function hashDealData(data: {
   dealId: number;
   channelId: number;
   advertiserId: number;
-  amountTon: number;
+  amountTon: number | { toString(): string };
   finalStatus: string;
   escrowAddress?: string | null;
   completedAt: string;

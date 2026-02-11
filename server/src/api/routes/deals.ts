@@ -1,11 +1,8 @@
 import { FastifyInstance } from 'fastify';
-import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
-import { createDealSchema, scheduleDealSchema, disputeDealSchema } from '../schemas/index.js';
+import { createDealSchema, scheduleDealSchema, disputeDealSchema, parseParamId } from '../schemas/index.js';
 import * as dealService from '../../services/deal.service.js';
 import { createEscrowWallet } from '../../services/escrow.service.js';
-
-const prisma = new PrismaClient();
 
 export async function dealRoutes(app: FastifyInstance) {
   // Create a new deal
@@ -28,7 +25,8 @@ export async function dealRoutes(app: FastifyInstance) {
     '/api/deals/:id',
     { preHandler: authMiddleware },
     async (request) => {
-      return dealService.getDeal(Number(request.params.id), request.telegramUser.id);
+      const id = parseParamId(request.params.id);
+      return dealService.getDeal(id, request.telegramUser.id);
     },
   );
 
@@ -37,7 +35,7 @@ export async function dealRoutes(app: FastifyInstance) {
     '/api/deals/:id/pay',
     { preHandler: authMiddleware },
     async (request) => {
-      const dealId = Number(request.params.id);
+      const dealId = parseParamId(request.params.id);
       const deal = await dealService.getDeal(dealId, request.telegramUser.id);
 
       if (deal.escrowAddress) {
@@ -54,10 +52,8 @@ export async function dealRoutes(app: FastifyInstance) {
     '/api/deals/:id/cancel',
     { preHandler: authMiddleware },
     async (request) => {
-      return dealService.cancelDeal(
-        Number(request.params.id),
-        request.telegramUser.id,
-      );
+      const id = parseParamId(request.params.id);
+      return dealService.cancelDeal(id, request.telegramUser.id);
     },
   );
 
@@ -66,12 +62,9 @@ export async function dealRoutes(app: FastifyInstance) {
     '/api/deals/:id/dispute',
     { preHandler: authMiddleware },
     async (request) => {
+      const id = parseParamId(request.params.id);
       const body = disputeDealSchema.parse(request.body);
-      return dealService.disputeDeal(
-        Number(request.params.id),
-        request.telegramUser.id,
-        body.reason,
-      );
+      return dealService.disputeDeal(id, request.telegramUser.id, body.reason);
     },
   );
 
@@ -80,9 +73,10 @@ export async function dealRoutes(app: FastifyInstance) {
     '/api/deals/:id/creative/schedule',
     { preHandler: authMiddleware },
     async (request) => {
+      const id = parseParamId(request.params.id);
       const body = scheduleDealSchema.parse(request.body);
       return dealService.setScheduledPostTime(
-        Number(request.params.id),
+        id,
         request.telegramUser.id,
         new Date(body.scheduledPostAt),
       );
@@ -94,13 +88,10 @@ export async function dealRoutes(app: FastifyInstance) {
     '/api/deals/:id/receipt',
     { preHandler: authMiddleware },
     async (request) => {
-      const receipt = await prisma.dealReceipt.findUnique({
-        where: { dealId: Number(request.params.id) },
-      });
-      if (!receipt) {
-        return { purged: false, message: 'Deal data still available or deal not found' };
-      }
-      return { purged: true, receipt };
+      const id = parseParamId(request.params.id);
+      // Authorization: verify the user is a party to this deal
+      await dealService.getDeal(id, request.telegramUser.id);
+      return dealService.getDealReceipt(id);
     },
   );
 }

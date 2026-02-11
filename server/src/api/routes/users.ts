@@ -16,7 +16,7 @@ export async function userRoutes(app: FastifyInstance) {
     return user;
   });
 
-  // Update user profile
+  // Update user profile (only tonWalletAddress — role is not self-assignable)
   app.put('/api/users/me', { preHandler: authMiddleware }, async (request) => {
     const body = updateUserSchema.parse(request.body);
     return prisma.user.update({

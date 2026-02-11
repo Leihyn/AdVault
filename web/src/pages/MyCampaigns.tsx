@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Section, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
 import { fetchMyCampaigns } from '../api/client.js';
 import { CampaignCard } from '../components/CampaignCard.js';
 
@@ -11,15 +12,29 @@ export function MyCampaigns() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '12px' }}>My Campaigns</h1>
-      {isLoading && <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading...</p>}
-      {campaigns?.map((campaign: any) => (
-        <CampaignCard key={campaign.id} campaign={campaign} />
-      ))}
-      {campaigns?.length === 0 && (
-        <p style={{ color: 'var(--tg-theme-hint-color)', textAlign: 'center', marginTop: '32px' }}>
-          No campaigns yet. Create one with the bot using /createcampaign.
-        </p>
+      <div className="page-header">
+        <Title level="2" weight="1">My Campaigns</Title>
+        <Text style={{ color: 'var(--tgui--hint_color)' }}>
+          {campaigns?.length !== undefined ? `${campaigns.length} active` : 'Campaigns you created'}
+        </Text>
+      </div>
+      {isLoading && (
+        <Placeholder>
+          <Spinner size="m" />
+        </Placeholder>
+      )}
+      {campaigns?.length > 0 && (
+        <Section>
+          {campaigns.map((campaign: any) => (
+            <CampaignCard key={campaign.id} campaign={campaign} />
+          ))}
+        </Section>
+      )}
+      {!isLoading && campaigns?.length === 0 && (
+        <Placeholder
+          header="No campaigns yet"
+          description="Create one with the bot using /createcampaign."
+        />
       )}
     </div>
   );

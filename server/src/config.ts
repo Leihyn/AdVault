@@ -7,13 +7,16 @@ const envSchema = z.object({
   MINI_APP_URL: z.string().default('https://localhost:5173'),
   TON_NETWORK: z.enum(['mainnet', 'testnet']).default('testnet'),
   TON_API_KEY: z.string().default(''),
+  TON_API_KEY_FALLBACK: z.string().default(''),
   TON_MASTER_MNEMONIC: z.string().default(''),
   TON_MASTER_WALLET_ADDRESS: z.string().default(''),
   ESCROW_ENCRYPTION_KEY: z.string().default('0'.repeat(64)),
+  YOUTUBE_API_KEY: z.string().default(''),
   PURGE_AFTER_DAYS: z.coerce.number().default(30),
   PLATFORM_FEE_PERCENT: z.coerce.number().default(5),
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  DEV_BYPASS_SECRET: z.string().default(''),
 });
 
 function loadConfig() {

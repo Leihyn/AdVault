@@ -1,5 +1,6 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Cell, Text, Chip } from '@telegram-apps/telegram-ui';
 
 interface Props {
   campaign: {
@@ -15,40 +16,22 @@ interface Props {
 }
 
 export function CampaignCard({ campaign }: Props) {
+  const navigate = useNavigate();
+  const tags = [campaign.targetLanguage?.toUpperCase(), campaign.targetCategory].filter(Boolean);
+
   return (
-    <Link
-      to={`/campaigns/${campaign.id}`}
-      style={{
-        display: 'block',
-        padding: '12px',
-        marginBottom: '8px',
-        borderRadius: '12px',
-        backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-        textDecoration: 'none',
-        color: 'var(--tg-theme-text-color, #000)',
-      }}
+    <Cell
+      onClick={() => navigate(`/campaigns/${campaign.id}`)}
+      subtitle={campaign.brief}
+      after={<Chip mode="mono">{campaign.budgetTon} TON</Chip>}
+      description={
+        [
+          campaign._count ? `${campaign._count.applications} applications` : null,
+          tags.length > 0 ? tags.join(' \u00B7 ') : null,
+        ].filter(Boolean).join(' \u00B7 ') || undefined
+      }
     >
-      <div style={{ fontWeight: 600, fontSize: '16px' }}>{campaign.title}</div>
-      <div style={{
-        marginTop: '4px',
-        fontSize: '13px',
-        color: 'var(--tg-theme-hint-color, #999)',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      }}>
-        {campaign.brief}
-      </div>
-      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '13px' }}>
-        <span style={{ fontWeight: 500, color: 'var(--tg-theme-link-color, #3390ec)' }}>
-          {campaign.budgetTon} TON
-        </span>
-        {campaign._count && (
-          <span style={{ color: 'var(--tg-theme-hint-color, #999)' }}>
-            {campaign._count.applications} applications
-          </span>
-        )}
-      </div>
-    </Link>
+      {campaign.title}
+    </Cell>
   );
 }

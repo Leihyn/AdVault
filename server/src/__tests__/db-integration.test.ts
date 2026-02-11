@@ -91,6 +91,7 @@ describe('Database Integration Tests', () => {
       const channel = await prisma.channel.create({
         data: {
           telegramChatId: -1001234567890n,
+          platformChannelId: String(-1001234567890n),
           ownerId: owner!.id,
           title: 'Test Channel',
           username: 'testchannel',
@@ -124,6 +125,7 @@ describe('Database Integration Tests', () => {
       const channel = await prisma.channel.create({
         data: {
           telegramChatId: -1009999999999n,
+          platformChannelId: String(-1009999999999n),
           ownerId: owner!.id,
           title: 'Second Channel',
           subscribers: 10000,
@@ -168,7 +170,7 @@ describe('Database Integration Tests', () => {
         },
       });
       expect(format.formatType).toBe('POST');
-      expect(format.priceTon).toBe(50);
+      expect(Number(format.priceTon)).toBe(50);
       expect(format.isActive).toBe(true);
     });
 
@@ -206,7 +208,7 @@ describe('Database Integration Tests', () => {
         },
       });
       expect(campaign.status).toBe('ACTIVE');
-      expect(campaign.budgetTon).toBe(500);
+      expect(Number(campaign.budgetTon)).toBe(500);
     });
 
     it('lists active campaigns', async () => {
@@ -247,7 +249,7 @@ describe('Database Integration Tests', () => {
         },
       });
       expect(app.status).toBe('PENDING');
-      expect(app.proposedPriceTon).toBe(40);
+      expect(Number(app.proposedPriceTon)).toBe(40);
     });
 
     it('rejects duplicate application (unique constraint)', async () => {
@@ -328,7 +330,7 @@ describe('Database Integration Tests', () => {
         },
       });
       expect(tx.type).toBe('DEPOSIT');
-      expect(tx.amountTon).toBe(50);
+      expect(Number(tx.amountTon)).toBe(50);
     });
 
     it('transitions to CREATIVE_PENDING', async () => {
@@ -399,12 +401,12 @@ describe('Database Integration Tests', () => {
         where: { id: dealId },
         data: {
           status: 'POSTED',
-          postedMessageId: 12345,
+          postedMessageId: '12345',
         },
       });
       const deal = await prisma.deal.findUnique({ where: { id: dealId } });
       expect(deal!.status).toBe('POSTED');
-      expect(deal!.postedMessageId).toBe(12345);
+      expect(deal!.postedMessageId).toBe('12345');
     });
 
     it('verifies and completes the deal', async () => {
@@ -437,7 +439,7 @@ describe('Database Integration Tests', () => {
         },
       });
       expect(tx.type).toBe('RELEASE');
-      expect(tx.amountTon).toBe(47.5);
+      expect(Number(tx.amountTon)).toBe(47.5);
     });
 
     it('full deal has all related records', async () => {
@@ -741,7 +743,7 @@ describe('Database Integration Tests', () => {
         _sum: { amountTon: true },
         where: { status: 'COMPLETED' },
       });
-      expect(result._sum.amountTon).toBeGreaterThanOrEqual(50);
+      expect(Number(result._sum.amountTon)).toBeGreaterThanOrEqual(50);
     });
 
     it('counts completed deals', async () => {

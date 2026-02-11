@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { Section, Cell, Button, Chip, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
 import { fetchChannel, fetchChannelStats, createDeal } from '../api/client.js';
+import { PlatformIcon } from '../components/Icons.js';
 
 export function ChannelDetail() {
   const { id } = useParams<{ id: string }>();
@@ -23,14 +25,13 @@ export function ChannelDetail() {
     onSuccess: (deal) => navigate(`/deals/${deal.id}`),
   });
 
-  if (isLoading) return <p>Loading...</p>;
-  if (!channel) return <p>Channel not found</p>;
+  if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (!channel) return <Placeholder header="Channel not found" description="This channel doesn't exist" />;
 
   const handleCreateDeal = () => {
     if (!selectedFormat) return;
     const format = channel.adFormats.find((f: any) => f.id === selectedFormat);
     if (!format) return;
-
     dealMutation.mutate({
       channelId: channel.id,
       adFormatId: format.id,
@@ -40,103 +41,95 @@ export function ChannelDetail() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '20px', fontWeight: 700 }}>
-        {channel.title}
+      <div className="page-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Title level="2" weight="1">{channel.title}</Title>
+          {channel.platform && channel.platform !== 'TELEGRAM' && (
+            <Chip mode="mono">
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <PlatformIcon platform={channel.platform} />
+                {channel.platform.charAt(0) + channel.platform.slice(1).toLowerCase()}
+              </span>
+            </Chip>
+          )}
+        </div>
         {channel.username && (
-          <span style={{ color: 'var(--tg-theme-hint-color)', fontWeight: 400, fontSize: '14px' }}>
-            {' '}@{channel.username}
-          </span>
+          <Text style={{ color: 'var(--tgui--hint_color)' }}>@{channel.username}</Text>
         )}
-      </h1>
-      {channel.description && (
-        <p style={{ color: 'var(--tg-theme-hint-color)', fontSize: '14px', marginTop: '4px' }}>
-          {channel.description}
-        </p>
-      )}
+        {channel.description && (
+          <Text style={{ color: 'var(--tgui--hint_color)', display: 'block', marginTop: '4px' }}>
+            {channel.description}
+          </Text>
+        )}
+      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '16px' }}>
-        <StatBox label="Subscribers" value={channel.subscribers.toLocaleString()} />
-        <StatBox label="Avg Views" value={channel.avgViews.toLocaleString()} />
-        <StatBox label="Avg Reach" value={channel.avgReach.toLocaleString()} />
+      {/* Stat cards grid */}
+      <div className="stat-grid stat-grid--three" style={{ marginBottom: '16px' }}>
+        <div className="stat-card">
+          <div className="stat-card__value">{channel.subscribers.toLocaleString()}</div>
+          <div className="stat-card__label">Subscribers</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{channel.avgViews.toLocaleString()}</div>
+          <div className="stat-card__label">Avg Views</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{channel.avgReach.toLocaleString()}</div>
+          <div className="stat-card__label">Avg Reach</div>
+        </div>
       </div>
 
       {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
-          <StatBox label="Total Deals" value={stats.totalDeals} />
-          <StatBox label="Completed" value={stats.completedDeals} />
-          <StatBox label="Revenue" value={`${stats.totalRevenueTon} TON`} />
-        </div>
-      )}
-
-      <h2 style={{ fontSize: '16px', fontWeight: 600, marginTop: '24px', marginBottom: '8px' }}>
-        Ad Formats
-      </h2>
-      {channel.adFormats.map((format: any) => (
-        <div
-          key={format.id}
-          onClick={() => setSelectedFormat(format.id)}
-          style={{
-            padding: '12px',
-            marginBottom: '8px',
-            borderRadius: '10px',
-            backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-            border: selectedFormat === format.id
-              ? '2px solid var(--tg-theme-button-color, #3390ec)'
-              : '2px solid transparent',
-            cursor: 'pointer',
-          }}
-        >
-          <div style={{ fontWeight: 600 }}>{format.label}</div>
-          {format.description && (
-            <div style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)', marginTop: '2px' }}>
-              {format.description}
-            </div>
-          )}
-          <div style={{ fontWeight: 500, color: 'var(--tg-theme-link-color, #3390ec)', marginTop: '4px' }}>
-            {format.priceTon} TON
+        <div className="stat-grid stat-grid--three" style={{ marginBottom: '16px' }}>
+          <div className="stat-card">
+            <div className="stat-card__value">{stats.totalDeals}</div>
+            <div className="stat-card__label">Total Deals</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card__value">{stats.completedDeals}</div>
+            <div className="stat-card__label">Completed</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card__value">{stats.totalRevenueTon}</div>
+            <div className="stat-card__label">Revenue (TON)</div>
           </div>
         </div>
-      ))}
+      )}
+
+      <Section header="Ad Formats">
+        {channel.adFormats.map((format: any) => (
+          <Cell
+            key={format.id}
+            onClick={() => setSelectedFormat(format.id)}
+            subtitle={format.description}
+            after={<Chip mode={selectedFormat === format.id ? 'elevated' : 'mono'}>{format.priceTon} TON</Chip>}
+            style={selectedFormat === format.id ? {
+              backgroundColor: 'var(--tgui--secondary_bg_color)',
+            } : undefined}
+          >
+            {format.label}
+          </Cell>
+        ))}
+      </Section>
 
       {selectedFormat && (
-        <button
-          onClick={handleCreateDeal}
-          disabled={dealMutation.isPending}
-          style={{
-            width: '100%',
-            padding: '14px',
-            marginTop: '16px',
-            borderRadius: '12px',
-            border: 'none',
-            backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
-            color: 'var(--tg-theme-button-text-color, #fff)',
-            fontWeight: 600,
-            fontSize: '15px',
-            cursor: dealMutation.isPending ? 'wait' : 'pointer',
-          }}
-        >
-          {dealMutation.isPending ? 'Creating Deal...' : 'Create Deal'}
-        </button>
+        <div style={{ padding: '16px' }}>
+          <Button
+            size="l"
+            stretched
+            onClick={handleCreateDeal}
+            loading={dealMutation.isPending}
+          >
+            Create Deal
+          </Button>
+        </div>
       )}
-      {dealMutation.isError && (
-        <p style={{ color: '#d9534f', marginTop: '8px', fontSize: '13px' }}>
-          {(dealMutation.error as Error).message}
-        </p>
-      )}
-    </div>
-  );
-}
 
-function StatBox({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div style={{
-      padding: '10px',
-      borderRadius: '10px',
-      backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-      textAlign: 'center',
-    }}>
-      <div style={{ fontSize: '16px', fontWeight: 700 }}>{value}</div>
-      <div style={{ fontSize: '11px', color: 'var(--tg-theme-hint-color, #999)' }}>{label}</div>
+      {dealMutation.isError && (
+        <div className="callout callout--error">
+          {(dealMutation.error as Error).message}
+        </div>
+      )}
     </div>
   );
 }

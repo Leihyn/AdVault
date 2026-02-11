@@ -2,17 +2,42 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  fetchDeal,
-  payDeal,
-  cancelDeal,
-  submitCreative,
-  approveCreative,
-  requestRevision,
-  schedulePost,
+  Section, Cell, Button, Input, Placeholder, Spinner, Title, Text,
+} from '@telegram-apps/telegram-ui';
+import {
+  fetchDeal, payDeal, cancelDeal, submitCreative,
+  approveCreative, requestRevision, schedulePost,
 } from '../api/client.js';
 import { DealStatusBadge } from '../components/DealStatus.js';
 import { CreativeEditor } from '../components/CreativeEditor.js';
 import { useTelegram } from '../hooks/useTelegram.js';
+
+const DEAL_STEPS = [
+  { key: 'PENDING_PAYMENT', label: 'Pay' },
+  { key: 'FUNDED', label: 'Funded' },
+  { key: 'CREATIVE', label: 'Creative' },
+  { key: 'APPROVED', label: 'Approved' },
+  { key: 'SCHEDULED', label: 'Scheduled' },
+  { key: 'POSTED', label: 'Posted' },
+  { key: 'COMPLETED', label: 'Done' },
+];
+
+const STATUS_TO_STEP: Record<string, number> = {
+  PENDING_PAYMENT: 0,
+  FUNDED: 1,
+  CREATIVE_PENDING: 2,
+  CREATIVE_SUBMITTED: 2,
+  CREATIVE_REVISION: 2,
+  CREATIVE_APPROVED: 3,
+  SCHEDULED: 4,
+  POSTED: 5,
+  VERIFIED: 6,
+  COMPLETED: 6,
+  CANCELLED: -1,
+  REFUNDED: -1,
+  DISPUTED: -1,
+  TIMED_OUT: -1,
+};
 
 export function DealDetail() {
   const { id } = useParams<{ id: string }>();
@@ -45,194 +70,187 @@ export function DealDetail() {
     onSuccess: invalidate,
   });
 
-  if (isLoading) return <p>Loading...</p>;
-  if (!deal) return <p>Deal not found</p>;
+  if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (!deal) return <Placeholder header="Deal not found" />;
 
   const isAdvertiser = user && deal.advertiser?.telegramId?.toString() === user.id.toString();
   const latestCreative = deal.creatives?.[0];
+  const currentStep = STATUS_TO_STEP[deal.status] ?? -1;
+  const isCancelled = currentStep === -1;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 700 }}>Deal #{deal.id}</h1>
+      <div className="page-header--row">
+        <Title level="2" weight="1">Deal #{deal.id}</Title>
         <DealStatusBadge status={deal.status} />
       </div>
 
-      <div style={sectionStyle}>
-        <div style={rowStyle}><span style={labelStyle}>Channel</span><span>{deal.channel?.title}</span></div>
-        <div style={rowStyle}><span style={labelStyle}>Format</span><span>{deal.adFormat?.label}</span></div>
-        <div style={rowStyle}><span style={labelStyle}>Amount</span><span>{deal.amountTon} TON</span></div>
-        {deal.escrowAddress && (
-          <div style={rowStyle}>
-            <span style={labelStyle}>Escrow</span>
-            <span style={{ fontSize: '11px', wordBreak: 'break-all' }}>{deal.escrowAddress}</span>
-          </div>
-        )}
-      </div>
-
-      {/* PENDING_PAYMENT — show pay button for advertiser */}
-      {deal.status === 'PENDING_PAYMENT' && isAdvertiser && (
-        <div style={sectionStyle}>
-          <h2 style={h2Style}>Payment</h2>
-          {payMutation.data?.address ? (
-            <div>
-              <p style={{ fontSize: '14px', marginBottom: '8px' }}>
-                Send exactly <strong>{deal.amountTon} TON</strong> to:
-              </p>
-              <div style={{
-                padding: '12px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-                fontSize: '12px',
-                wordBreak: 'break-all',
-                fontFamily: 'monospace',
-              }}>
-                {payMutation.data.address}
+      {/* Progress steps */}
+      {!isCancelled && (
+        <div className="deal-steps">
+          {DEAL_STEPS.map((step, i) => (
+            <React.Fragment key={step.key}>
+              {i > 0 && (
+                <div className={`deal-step__line${i <= currentStep ? ' deal-step__line--done' : ''}`} />
+              )}
+              <div className="deal-step">
+                <div className={`deal-step__dot${
+                  i < currentStep ? ' deal-step__dot--done' :
+                  i === currentStep ? ' deal-step__dot--active' : ''
+                }`} />
+                <div className={`deal-step__label${i === currentStep ? ' deal-step__label--active' : ''}`}>
+                  {step.label}
+                </div>
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--tg-theme-hint-color)', marginTop: '8px' }}>
-                Payment is automatically detected. This page refreshes every 10s.
-              </p>
-            </div>
-          ) : (
-            <button onClick={() => payMutation.mutate()} disabled={payMutation.isPending} style={btnStyle}>
-              {payMutation.isPending ? 'Loading...' : 'Get Payment Address'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* CREATIVE_PENDING / CREATIVE_REVISION — show editor for owner */}
-      {['CREATIVE_PENDING', 'CREATIVE_REVISION'].includes(deal.status) && !isAdvertiser && (
-        <div style={sectionStyle}>
-          <h2 style={h2Style}>Submit Creative</h2>
-          {latestCreative?.reviewerNotes && (
-            <div style={{
-              padding: '10px',
-              borderRadius: '8px',
-              backgroundColor: '#fff3cd',
-              color: '#856404',
-              fontSize: '13px',
-              marginBottom: '12px',
-            }}>
-              Revision notes: {latestCreative.reviewerNotes}
-            </div>
-          )}
-          <CreativeEditor
-            onSubmit={(data) => creativeMutation.mutate(data)}
-            loading={creativeMutation.isPending}
-            initial={latestCreative ? { contentText: latestCreative.contentText, mediaUrl: latestCreative.mediaUrl } : undefined}
-          />
-        </div>
-      )}
-
-      {/* CREATIVE_SUBMITTED — show approve/revision for advertiser */}
-      {deal.status === 'CREATIVE_SUBMITTED' && isAdvertiser && latestCreative && (
-        <div style={sectionStyle}>
-          <h2 style={h2Style}>Review Creative</h2>
-          <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)', marginBottom: '12px' }}>
-            <p style={{ whiteSpace: 'pre-wrap', fontSize: '14px' }}>{latestCreative.contentText}</p>
-            {latestCreative.mediaUrl && (
-              <img src={latestCreative.mediaUrl} style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '8px' }} alt="creative" />
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} style={{ ...btnStyle, flex: 1 }}>
-              Approve
-            </button>
-            <button
-              onClick={() => {
-                if (revisionNotes) revisionMutation.mutate();
-              }}
-              disabled={revisionMutation.isPending || !revisionNotes}
-              style={{ ...btnStyle, flex: 1, backgroundColor: '#f0ad4e' }}
-            >
-              Request Revision
-            </button>
-          </div>
-          <input
-            type="text"
-            placeholder="Revision notes..."
-            value={revisionNotes}
-            onChange={(e) => setRevisionNotes(e.target.value)}
-            style={{ ...inputStyle, marginTop: '8px' }}
-          />
-        </div>
-      )}
-
-      {/* CREATIVE_APPROVED — show schedule for either party */}
-      {deal.status === 'CREATIVE_APPROVED' && (
-        <div style={sectionStyle}>
-          <h2 style={h2Style}>Schedule Post</h2>
-          <input
-            type="datetime-local"
-            value={scheduleDate}
-            onChange={(e) => setScheduleDate(e.target.value)}
-            style={inputStyle}
-          />
-          <button
-            onClick={() => scheduleMutation.mutate()}
-            disabled={scheduleMutation.isPending || !scheduleDate}
-            style={{ ...btnStyle, marginTop: '8px' }}
-          >
-            {scheduleMutation.isPending ? 'Scheduling...' : 'Schedule'}
-          </button>
-        </div>
-      )}
-
-      {/* Event history */}
-      {deal.events?.length > 0 && (
-        <div style={sectionStyle}>
-          <h2 style={h2Style}>History</h2>
-          {deal.events.map((event: any) => (
-            <div key={event.id} style={{ fontSize: '13px', marginBottom: '6px', color: 'var(--tg-theme-hint-color)' }}>
-              <span>{new Date(event.createdAt).toLocaleString()}</span>{' '}
-              <span>{event.eventType}</span>
-            </div>
+            </React.Fragment>
           ))}
         </div>
       )}
 
+      <Section header="Details">
+        <Cell after={<Text>{deal.channel?.title}</Text>}>Channel</Cell>
+        <Cell after={<Text>{deal.adFormat?.label}</Text>}>Format</Cell>
+        <Cell after={<Text weight="1">{deal.amountTon} TON</Text>}>Amount</Cell>
+        {deal.escrowAddress && (
+          <Cell multiline>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <Text>Escrow</Text>
+              <div className="address-block">{deal.escrowAddress}</div>
+            </div>
+          </Cell>
+        )}
+      </Section>
+
+      {/* PENDING_PAYMENT - show pay button for advertiser */}
+      {deal.status === 'PENDING_PAYMENT' && isAdvertiser && (
+        <Section header="Payment">
+          {payMutation.data?.address ? (
+            <div style={{ padding: '16px' }}>
+              <Text>Send exactly <strong>{deal.amountTon} TON</strong> to:</Text>
+              <div className="address-block">{payMutation.data.address}</div>
+              <div className="callout callout--info" style={{ margin: '12px 0 0' }}>
+                Payment is automatically detected. This page refreshes every 10s.
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '16px' }}>
+              <Button size="l" stretched onClick={() => payMutation.mutate()} loading={payMutation.isPending}>
+                Get Payment Address
+              </Button>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* CREATIVE_PENDING / CREATIVE_REVISION - show editor for owner */}
+      {['CREATIVE_PENDING', 'CREATIVE_REVISION'].includes(deal.status) && !isAdvertiser && (
+        <Section header="Submit Creative">
+          {latestCreative?.reviewerNotes && (
+            <div className="callout callout--warning">
+              Revision notes: {latestCreative.reviewerNotes}
+            </div>
+          )}
+          <div style={{ padding: '16px' }}>
+            <CreativeEditor
+              onSubmit={(data) => creativeMutation.mutate(data)}
+              loading={creativeMutation.isPending}
+              initial={latestCreative ? { contentText: latestCreative.contentText, mediaUrl: latestCreative.mediaUrl } : undefined}
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* CREATIVE_SUBMITTED - show approve/revision for advertiser */}
+      {deal.status === 'CREATIVE_SUBMITTED' && isAdvertiser && latestCreative && (
+        <Section header="Review Creative">
+          <div style={{ padding: '16px' }}>
+            <div style={{
+              padding: '12px', borderRadius: '10px',
+              backgroundColor: 'var(--tgui--secondary_bg_color)', marginBottom: '12px',
+            }}>
+              <Text style={{ whiteSpace: 'pre-wrap' }}>{latestCreative.contentText}</Text>
+              {latestCreative.mediaUrl && (
+                <img src={latestCreative.mediaUrl} style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '8px' }} alt="creative" />
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <Button size="m" stretched onClick={() => approveMutation.mutate()} loading={approveMutation.isPending}>
+                Approve
+              </Button>
+              <Button
+                size="m"
+                stretched
+                mode="bezeled"
+                onClick={() => { if (revisionNotes) revisionMutation.mutate(); }}
+                loading={revisionMutation.isPending}
+                disabled={!revisionNotes}
+              >
+                Request Revision
+              </Button>
+            </div>
+            <Input
+              placeholder="Revision notes..."
+              value={revisionNotes}
+              onChange={(e) => setRevisionNotes(e.target.value)}
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* CREATIVE_APPROVED - show schedule */}
+      {deal.status === 'CREATIVE_APPROVED' && (
+        <Section header="Schedule Post">
+          <div style={{ padding: '16px' }}>
+            <input
+              type="datetime-local"
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              style={{
+                width: '100%', padding: '10px', borderRadius: '10px',
+                border: '1px solid var(--tgui--outline)', boxSizing: 'border-box',
+                backgroundColor: 'var(--tgui--bg_color)', color: 'var(--tgui--text_color)',
+                fontSize: '14px', marginBottom: '8px',
+              }}
+            />
+            <Button
+              size="l"
+              stretched
+              onClick={() => scheduleMutation.mutate()}
+              loading={scheduleMutation.isPending}
+              disabled={!scheduleDate}
+            >
+              Schedule
+            </Button>
+          </div>
+        </Section>
+      )}
+
+      {/* Event history */}
+      {deal.events?.length > 0 && (
+        <Section header="History">
+          {deal.events.map((event: any) => (
+            <Cell key={event.id} subtitle={new Date(event.createdAt).toLocaleString()}>
+              {event.eventType.replace(/_/g, ' ')}
+            </Cell>
+          ))}
+        </Section>
+      )}
+
       {/* Cancel button for active deals */}
       {!['COMPLETED', 'CANCELLED', 'REFUNDED', 'TIMED_OUT'].includes(deal.status) && (
-        <button
-          onClick={() => { if (confirm('Cancel this deal?')) cancelMutation.mutate(); }}
-          disabled={cancelMutation.isPending}
-          style={{ ...btnStyle, backgroundColor: '#d9534f', marginTop: '16px' }}
-        >
-          Cancel Deal
-        </button>
+        <div style={{ padding: '16px' }}>
+          <Button
+            size="l"
+            stretched
+            mode="bezeled"
+            loading={cancelMutation.isPending}
+            onClick={() => { if (confirm('Cancel this deal?')) cancelMutation.mutate(); }}
+            style={{ color: 'var(--tgui--destructive_text_color)' }}
+          >
+            Cancel Deal
+          </Button>
+        </div>
       )}
     </div>
   );
 }
-
-const sectionStyle: React.CSSProperties = {
-  marginTop: '16px',
-  padding: '12px',
-  borderRadius: '12px',
-  backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-};
-const h2Style: React.CSSProperties = { fontSize: '16px', fontWeight: 600, marginBottom: '8px' };
-const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '14px' };
-const labelStyle: React.CSSProperties = { color: 'var(--tg-theme-hint-color, #999)' };
-const btnStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px',
-  borderRadius: '10px',
-  border: 'none',
-  backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
-  color: 'var(--tg-theme-button-text-color, #fff)',
-  fontWeight: 600,
-  fontSize: '14px',
-  cursor: 'pointer',
-};
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px',
-  borderRadius: '8px',
-  border: '1px solid var(--tg-theme-hint-color, #ccc)',
-  backgroundColor: 'var(--tg-theme-bg-color, #fff)',
-  color: 'var(--tg-theme-text-color, #000)',
-  fontSize: '14px',
-  boxSizing: 'border-box',
-};

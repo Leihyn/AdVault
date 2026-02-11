@@ -1,50 +1,65 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Section, Cell, Placeholder, Spinner, Title, Text, Chip } from '@telegram-apps/telegram-ui';
 import { fetchDeals } from '../api/client.js';
 import { DealStatusBadge } from '../components/DealStatus.js';
 
+const ROLE_FILTERS = [
+  { label: 'All', value: '' },
+  { label: 'As Advertiser', value: 'advertiser' },
+  { label: 'As Owner', value: 'owner' },
+];
+
 export function Deals() {
+  const navigate = useNavigate();
+  const [roleFilter, setRoleFilter] = useState('');
+
+  const params: Record<string, string> = {};
+  if (roleFilter) params.role = roleFilter;
+
   const { data: deals, isLoading } = useQuery({
-    queryKey: ['deals'],
-    queryFn: () => fetchDeals(),
+    queryKey: ['deals', params],
+    queryFn: () => fetchDeals(params),
   });
 
   return (
     <div>
-      <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '12px' }}>My Deals</h1>
-      {isLoading && <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading...</p>}
-      {deals?.map((deal: any) => (
-        <Link
-          key={deal.id}
-          to={`/deals/${deal.id}`}
-          style={{
-            display: 'block',
-            padding: '12px',
-            marginBottom: '8px',
-            borderRadius: '12px',
-            backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-            textDecoration: 'none',
-            color: 'var(--tg-theme-text-color, #000)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600 }}>Deal #{deal.id}</span>
-            <DealStatusBadge status={deal.status} />
-          </div>
-          <div style={{ fontSize: '14px', marginTop: '4px' }}>
-            {deal.channel?.title}
-          </div>
-          <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>
-            <span>{deal.adFormat?.label}</span>
-            <span>{deal.amountTon} TON</span>
-          </div>
-        </Link>
-      ))}
-      {deals?.length === 0 && (
-        <p style={{ color: 'var(--tg-theme-hint-color)', textAlign: 'center', marginTop: '32px' }}>
-          No deals yet. Browse channels to create your first deal.
-        </p>
+      <div className="page-header">
+        <Title level="2" weight="1">My Deals</Title>
+      </div>
+
+      <div className="filter-row">
+        {ROLE_FILTERS.map((f) => (
+          <Chip key={f.value} mode={roleFilter === f.value ? 'elevated' : 'mono'} onClick={() => setRoleFilter(f.value)}>
+            {f.label}
+          </Chip>
+        ))}
+      </div>
+
+      {isLoading && <Placeholder><Spinner size="m" /></Placeholder>}
+
+      {deals?.length > 0 && (
+        <Section>
+          {deals.map((deal: any) => (
+            <Cell
+              key={deal.id}
+              onClick={() => navigate(`/deals/${deal.id}`)}
+              subtitle={`${deal.adFormat?.label || 'Ad'} \u00B7 ${deal.amountTon} TON`}
+              after={<DealStatusBadge status={deal.status} />}
+              description={deal.channel?.title}
+            >
+              Deal #{deal.id}
+            </Cell>
+          ))}
+        </Section>
+      )}
+
+      {!isLoading && deals?.length === 0 && (
+        <Placeholder
+          header="No deals yet"
+          description="Browse channels to create your first deal, or apply to a campaign."
+        />
       )}
     </div>
   );

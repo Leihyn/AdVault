@@ -14,12 +14,12 @@ export interface TelegramInitData {
   query_id?: string;
 }
 
+/** Max age for initData: 5 minutes (down from 24h) */
+const MAX_AUTH_AGE_SECONDS = 300;
+
 /**
  * Validates Telegram Mini App initData.
  * Returns parsed user data if valid, null otherwise.
- *
- * Telegram signs initData with HMAC-SHA256 using a key derived from the bot token.
- * We recompute the hash and compare to verify authenticity.
  */
 export function validateInitData(initDataRaw: string): TelegramInitData | null {
   try {
@@ -48,10 +48,18 @@ export function validateInitData(initDataRaw: string): TelegramInitData | null {
 
     if (hash !== expectedHash) return null;
 
-    // Check auth_date is not too old (allow 24h)
-    const authDate = parseInt(params.get('auth_date') || '0', 10);
+    // Validate auth_date — reject missing, expired, or future timestamps
+    const authDateStr = params.get('auth_date');
+    if (!authDateStr) return null;
+
+    const authDate = parseInt(authDateStr, 10);
+    if (!authDate || isNaN(authDate)) return null;
+
     const now = Math.floor(Date.now() / 1000);
-    if (now - authDate > 86400) return null;
+    const age = now - authDate;
+
+    // Reject tokens older than 5 minutes or more than 1 minute in the future
+    if (age > MAX_AUTH_AGE_SECONDS || age < -60) return null;
 
     const userData = params.get('user');
     if (!userData) return null;

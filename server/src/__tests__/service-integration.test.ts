@@ -182,7 +182,7 @@ describe('Service Layer Integration Tests', () => {
         priceTon: 40,
       });
       formatId = format.id;
-      expect(format.priceTon).toBe(40);
+      expect(Number(format.priceTon)).toBe(40);
     });
 
     it('addAdFormat throws for non-owner', async () => {
@@ -259,7 +259,7 @@ describe('Service Layer Integration Tests', () => {
         message: 'Great fit',
         userId: ownerId,
       });
-      expect(app.proposedPriceTon).toBe(35);
+      expect(Number(app.proposedPriceTon)).toBe(35);
       expect(app.status).toBe('PENDING');
     });
 

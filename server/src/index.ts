@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
 import { registerRoutes } from './api/index.js';
 import { createBot } from './bot/index.js';
@@ -8,7 +10,42 @@ import { createWorkers } from './workers/index.js';
 async function main() {
   // --- Fastify server ---
   const app = Fastify({ logger: true });
-  await app.register(cors, { origin: true });
+
+  // Security headers (CSP, HSTS, X-Frame-Options, etc.)
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'telegram.org', '*.telegram.org'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    },
+  });
+
+  // CORS — restrict to known origins in production
+  const allowedOrigins = config.NODE_ENV === 'production'
+    ? [config.MINI_APP_URL]
+    : [config.MINI_APP_URL, 'http://localhost:5173', 'http://localhost:3000'];
+  await app.register(cors, {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
+  });
+
+  // Rate limiting — per-IP, with tighter limits on mutation endpoints
+  await app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    keyGenerator: (request) => {
+      // Use Telegram user ID if available, otherwise IP
+      return (request.headers['x-telegram-init-data'] as string)?.slice(0, 32)
+        || request.ip;
+    },
+  });
+
   await registerRoutes(app);
 
   // --- Telegram bot ---

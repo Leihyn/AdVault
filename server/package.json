@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
     "@grammyjs/conversations": "^2.0.3",
     "@grammyjs/runner": "^2.0.3",
     "@prisma/client": "^6.3.1",
@@ -23,6 +25,7 @@
     "@ton/ton": "^15.2.1",
     "bullmq": "^5.34.8",
     "fastify": "^5.2.1",
+    "googleapis": "^171.4.0",
     "grammy": "^1.35.0",
     "ioredis": "^5.4.2",
     "zod": "^3.24.1"

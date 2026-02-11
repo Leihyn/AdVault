@@ -318,13 +318,6 @@ describe('Zod Validation Schemas', () => {
 
   // ==================== User Schemas ====================
   describe('updateUserSchema', () => {
-    it('accepts role update', () => {
-      for (const role of ['OWNER', 'ADVERTISER', 'BOTH']) {
-        const result = updateUserSchema.parse({ role });
-        expect(result.role).toBe(role);
-      }
-    });
-
     it('accepts wallet address update', () => {
       const result = updateUserSchema.parse({
         tonWalletAddress: 'EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG',
@@ -332,8 +325,10 @@ describe('Zod Validation Schemas', () => {
       expect(result.tonWalletAddress).toBeDefined();
     });
 
-    it('rejects invalid role', () => {
-      expect(() => updateUserSchema.parse({ role: 'ADMIN' })).toThrow();
+    it('strips unknown fields like role', () => {
+      const result = updateUserSchema.parse({ role: 'ADMIN', tonWalletAddress: 'abc' });
+      expect((result as any).role).toBeUndefined();
+      expect(result.tonWalletAddress).toBe('abc');
     });
   });
 

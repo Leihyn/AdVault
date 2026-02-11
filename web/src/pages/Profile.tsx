@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Section, Cell, Button, Input, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
 import { fetchMe, updateMe } from '../api/client.js';
 import { useTelegram } from '../hooks/useTelegram.js';
 
@@ -11,6 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function Profile() {
   const { user: tgUser } = useTelegram();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [wallet, setWallet] = useState('');
   const [editing, setEditing] = useState(false);
@@ -29,132 +32,102 @@ export function Profile() {
     },
   });
 
-  if (isLoading) return <p>Loading...</p>;
+  if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+
+  const initial = profile?.firstName?.charAt(0)?.toUpperCase() || '?';
 
   return (
     <div>
-      <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '16px' }}>Profile</h1>
-
-      {profile && (
-        <div style={{
-          padding: '16px',
-          borderRadius: '12px',
-          backgroundColor: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-        }}>
-          <div style={rowStyle}>
-            <span style={labelStyle}>Name</span>
-            <span>{profile.firstName}</span>
-          </div>
-          {profile.username && (
-            <div style={rowStyle}>
-              <span style={labelStyle}>Username</span>
-              <span>@{profile.username}</span>
-            </div>
-          )}
-          <div style={rowStyle}>
-            <span style={labelStyle}>Role</span>
-            <span>{ROLE_LABELS[profile.role] || profile.role}</span>
-          </div>
-          <div style={rowStyle}>
-            <span style={labelStyle}>TON Wallet</span>
-            <span style={{ fontSize: '12px', wordBreak: 'break-all' }}>
-              {profile.tonWalletAddress || 'Not set'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginTop: '16px' }}>
-        {!editing ? (
-          <button onClick={() => { setEditing(true); setWallet(profile?.tonWalletAddress || ''); }} style={btnStyle}>
-            Edit Wallet Address
-          </button>
-        ) : (
-          <div>
-            <input
-              type="text"
-              value={wallet}
-              onChange={(e) => setWallet(e.target.value)}
-              placeholder="Your TON wallet address"
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid var(--tg-theme-hint-color, #ccc)',
-                backgroundColor: 'var(--tg-theme-bg-color, #fff)',
-                color: 'var(--tg-theme-text-color, #000)',
-                fontSize: '14px',
-                marginBottom: '8px',
-                boxSizing: 'border-box',
-              }}
-            />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => updateMutation.mutate({ tonWalletAddress: wallet })}
-                disabled={updateMutation.isPending}
-                style={{ ...btnStyle, flex: 1 }}
-              >
-                Save
-              </button>
-              <button onClick={() => setEditing(false)} style={{ ...btnStyle, flex: 1, backgroundColor: 'var(--tg-theme-hint-color, #999)' }}>
-                Cancel
-              </button>
-            </div>
-          </div>
+      {/* Avatar header */}
+      <div className="profile-header">
+        <div className="profile-header__avatar">{initial}</div>
+        <Title level="2" weight="1">{profile?.firstName || 'User'}</Title>
+        {profile?.username && (
+          <Text style={{ color: 'var(--tgui--hint_color)' }}>@{profile.username}</Text>
         )}
       </div>
 
-      {/* Role switcher */}
-      <div style={{ marginTop: '16px' }}>
-        <p style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>Switch Role</p>
-        <div style={{ display: 'flex', gap: '8px' }}>
+      <Section header="Account">
+        <Cell after={<Text>{ROLE_LABELS[profile?.role] || profile?.role || '—'}</Text>}>Role</Cell>
+        <Cell multiline after={
+          <Text style={{ fontSize: '12px', wordBreak: 'break-all' }}>
+            {profile?.tonWalletAddress || 'Not set'}
+          </Text>
+        }>TON Wallet</Cell>
+      </Section>
+
+      <Section header="Wallet">
+        {!editing ? (
+          <div style={{ padding: '16px' }}>
+            <Button
+              size="l"
+              stretched
+              mode="bezeled"
+              onClick={() => { setEditing(true); setWallet(profile?.tonWalletAddress || ''); }}
+            >
+              Edit Wallet Address
+            </Button>
+          </div>
+        ) : (
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <Input
+              placeholder="Your TON wallet address"
+              value={wallet}
+              onChange={(e) => setWallet(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button
+                size="m"
+                stretched
+                onClick={() => updateMutation.mutate({ tonWalletAddress: wallet })}
+                loading={updateMutation.isPending}
+              >
+                Save
+              </Button>
+              <Button size="m" stretched mode="gray" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </Section>
+
+      <Section header="Switch Role">
+        <div style={{ display: 'flex', gap: '8px', padding: '16px' }}>
           {(['OWNER', 'ADVERTISER', 'BOTH'] as const).map((role) => (
-            <button
+            <Button
               key={role}
+              size="m"
+              stretched
+              mode={profile?.role === role ? 'filled' : 'outline'}
               onClick={() => updateMutation.mutate({ role })}
               disabled={updateMutation.isPending || profile?.role === role}
-              style={{
-                flex: 1,
-                padding: '10px',
-                borderRadius: '8px',
-                border: profile?.role === role
-                  ? '2px solid var(--tg-theme-button-color, #3390ec)'
-                  : '1px solid var(--tg-theme-hint-color, #ccc)',
-                backgroundColor: profile?.role === role
-                  ? 'var(--tg-theme-button-color, #3390ec)'
-                  : 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-                color: profile?.role === role
-                  ? 'var(--tg-theme-button-text-color, #fff)'
-                  : 'var(--tg-theme-text-color, #000)',
-                fontSize: '12px',
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
             >
               {ROLE_LABELS[role]}
-            </button>
+            </Button>
           ))}
         </div>
-      </div>
+      </Section>
+
+      <Section header="My Content">
+        <Cell onClick={() => navigate('/my-channels')} after={<ChevronRight />}>
+          My Channels
+        </Cell>
+        <Cell onClick={() => navigate('/my-campaigns')} after={<ChevronRight />}>
+          My Campaigns
+        </Cell>
+        <Cell onClick={() => navigate('/deals')} after={<ChevronRight />}>
+          My Deals
+        </Cell>
+      </Section>
     </div>
   );
 }
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  padding: '6px 0',
-  fontSize: '14px',
-};
-const labelStyle: React.CSSProperties = { color: 'var(--tg-theme-hint-color, #999)' };
-const btnStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px',
-  borderRadius: '10px',
-  border: 'none',
-  backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
-  color: 'var(--tg-theme-button-text-color, #fff)',
-  fontWeight: 600,
-  fontSize: '14px',
-  cursor: 'pointer',
-};
+function ChevronRight() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tgui--hint_color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
