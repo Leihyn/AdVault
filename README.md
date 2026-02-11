@@ -34,6 +34,78 @@ npm run dev
 
 The server runs on port 3000, the frontend on port 5173 (Vite proxies `/api` to the server).
 
+## Deploy (Render + Redis Cloud)
+
+A fully free deployment using Render (web service + Postgres) and Redis Cloud (managed Redis). No credit card required.
+
+### Step 1: Create a Redis Cloud database
+
+1. Go to [redis.com/try-free](https://redis.com/try-free/) and sign up (GitHub or email)
+2. Create a free database — pick any region, 30MB is plenty
+3. Copy the **public endpoint** and **password** from the database details page
+4. Your `REDIS_URL` is: `redis://default:<password>@<endpoint>:<port>`
+
+### Step 2: Deploy to Render
+
+1. Go to [render.com](https://render.com) and sign up with GitHub
+2. Click **"New"** → **"Web Service"** → connect your `escrow-build` repo
+3. Render auto-detects the `Dockerfile`
+4. Set **Name** to `escrow-build`
+5. Pick the **Free** instance type
+6. Under **Environment Variables**, add:
+
+```env
+BOT_TOKEN=your-bot-token-from-botfather
+MINI_APP_URL=https://escrow-build.onrender.com
+TON_NETWORK=testnet
+TON_MASTER_MNEMONIC=word1 word2 word3 ...
+TON_MASTER_WALLET_ADDRESS=EQA...
+ESCROW_ENCRYPTION_KEY=64-char-hex
+REDIS_URL=redis://default:password@host:port
+PLATFORM_FEE_PERCENT=5
+PURGE_AFTER_DAYS=30
+NODE_ENV=production
+```
+
+Generate the encryption key with `openssl rand -hex 32` if you don't have one.
+
+7. Click **"Create Web Service"** — Render builds the Dockerfile and deploys
+
+### Step 3: Add Postgres on Render
+
+1. In the Render dashboard, click **"New"** → **"PostgreSQL"**
+2. Name it `escrow-build-db`, pick the **Free** tier
+3. After creation, copy the **Internal Database URL** from the database info page
+4. Go back to your web service → **Environment** → add `DATABASE_URL` with the internal URL
+5. Render redeploys automatically after adding the variable
+
+### Step 4: Run database migration
+
+After the deploy succeeds, go to your web service → **Shell** tab and run:
+
+```bash
+cd /app/server && npx prisma db push
+```
+
+### Step 5: Keep it alive with UptimeRobot
+
+Render's free tier sleeps after 15 minutes of no inbound requests. Fix this with a free uptime monitor:
+
+1. Go to [uptimerobot.com](https://uptimerobot.com) and sign up (free)
+2. Click **"Add New Monitor"**
+3. Set type to **HTTP(s)**, URL to `https://escrow-build.onrender.com/api/health`
+4. Set interval to **5 minutes**
+5. Save — UptimeRobot pings your app every 5 min, keeping it awake 24/7
+
+### Step 6: Verify
+
+- Check Render deploy logs for `Server running on port 3000` and `Bot @yourbot started`
+- Open Telegram, send `/start` to your bot
+- Test `/help`, `/addchannel`, `/mychannels`
+- Open `https://escrow-build.onrender.com` to verify the Mini App loads
+
+Optional: `YOUTUBE_API_KEY` (for YouTube channel support), `TON_API_KEY` / `TON_API_KEY_FALLBACK` (TonCenter rate limits).
+
 ## How It Works
 
 **For advertisers:**
@@ -289,7 +361,7 @@ All Mini App routes validate Telegram `initData` via the `x-telegram-init-data` 
 
 ## Testing
 
-559+ tests covering the full stack:
+647+ tests covering the full stack:
 
 ```bash
 cd server

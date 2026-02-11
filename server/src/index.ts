@@ -1,7 +1,10 @@
+import 'dotenv/config';
+import path from 'node:path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
 import { registerRoutes } from './api/index.js';
 import { createBot } from './bot/index.js';
@@ -28,7 +31,7 @@ async function main() {
   // CORS — restrict to known origins in production
   const allowedOrigins = config.NODE_ENV === 'production'
     ? [config.MINI_APP_URL]
-    : [config.MINI_APP_URL, 'http://localhost:5173', 'http://localhost:3000'];
+    : [config.MINI_APP_URL, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
   await app.register(cors, {
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -47,6 +50,26 @@ async function main() {
   });
 
   await registerRoutes(app);
+
+  // --- Static file serving (production) ---
+  if (config.NODE_ENV === 'production') {
+    const webDistPath = path.join(__dirname, '..', '..', 'web', 'dist');
+
+    await app.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: '/',
+      wildcard: false,
+    });
+
+    // SPA fallback: serve index.html for non-API routes
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api')) {
+        reply.status(404).send({ error: 'Not found' });
+      } else {
+        reply.sendFile('index.html');
+      }
+    });
+  }
 
   // --- Telegram bot ---
   const bot = createBot();

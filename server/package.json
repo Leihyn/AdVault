@@ -17,6 +17,7 @@
     "@fastify/cors": "^10.0.2",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^9.0.0",
     "@grammyjs/conversations": "^2.0.3",
     "@grammyjs/runner": "^2.0.3",
     "@prisma/client": "^6.3.1",

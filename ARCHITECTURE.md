@@ -52,6 +52,7 @@ A trustless Telegram ads marketplace where advertisers fund per-deal TON escrow 
      │            │   │  verify          (10min)  │
      └────────────┘   │  timeout         (5min)   │
                       │  purge           (60min)  │
+                      │  recovery        (2min)   │
                       └──────────┬────────────────┘
                                  │
                       ┌──────────▼────────────────┐
@@ -73,7 +74,7 @@ A trustless Telegram ads marketplace where advertisers fund per-deal TON escrow 
 
 **Encryption at rest.** Creative content (ad text, media URLs) and wallet mnemonics are encrypted with AES-256-GCM using per-encryption random IVs. Data is purged after 30 days, leaving only a SHA-256 receipt as proof.
 
-**BullMQ worker queues.** Five independent workers handle async operations (payment detection, auto-posting, verification, timeouts, data purge). Each runs on its own Redis queue with independent polling intervals.
+**BullMQ worker queues.** Six independent workers handle async operations (payment detection, auto-posting, verification, timeouts, data purge, transfer recovery). Each runs on its own Redis queue with independent polling intervals.
 
 ---
 
@@ -91,7 +92,7 @@ A trustless Telegram ads marketplace where advertisers fund per-deal TON escrow 
 | Validation | Zod 3 |
 | Auth | Telegram initData HMAC-SHA256 verification |
 | Language | TypeScript 5 throughout |
-| Tests | Vitest 4 (559 tests) |
+| Tests | Vitest 4 (647+ tests) |
 
 ---
 
@@ -309,6 +310,7 @@ User ─────────┬──► Channel ──────► Chann
 | **verify** | 10min | Checks `POSTED` deals after 24h hold. Verifies message still exists in channel. If intact → `VERIFIED` → releases funds. If deleted → `DISPUTED`. |
 | **timeout** | 5min | Finds deals past their `timeoutAt`. Transitions to `TIMED_OUT`, triggers refund if funded. |
 | **purge** | 60min | Wipes sensitive data (creative text, media URLs, mnemonics, tx hashes) from terminal deals older than 30 days. Preserves `DealReceipt` with SHA-256 hash. Processes max 50 per run. |
+| **recovery** | 2min | Retries failed two-hop transfers. If hop 1 (escrow → master) succeeded but hop 2 (master → recipient) failed, recovery picks up where it left off. Prevents funds from getting stuck in the master wallet. |
 
 ---
 

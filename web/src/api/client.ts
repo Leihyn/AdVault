@@ -35,6 +35,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['x-telegram-init-data'] = initData;
   }
 
+  // DEV ONLY: bypass Telegram auth for local testing
+  if (!initData && import.meta.env.DEV) {
+    headers['x-dev-secret'] = 'devsecret123';
+    headers['x-dev-user-id'] = '1';
+  }
+
   const isIdempotent = !options.method || options.method === 'GET';
   const retries = isIdempotent ? MAX_RETRIES : 0;
 
