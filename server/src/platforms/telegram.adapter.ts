@@ -1,10 +1,13 @@
 import { Bot } from 'grammy';
-import { Platform, IPlatformAdapter, PlatformChannelInfo, PostResult } from './types.js';
+import { Platform, IPlatformAdapter, PlatformChannelInfo, PostResult, PostMetrics } from './types.js';
 import {
   fetchChannelStats,
+  fetchDetailedChannelStats,
   checkBotIsAdmin,
+  checkUserIsAdmin,
   sendChannelMessage,
   verifyMessageExists,
+  fetchTelegramChannelAdmins,
 } from '../services/telegram.service.js';
 
 export class TelegramAdapter implements IPlatformAdapter {
@@ -14,12 +17,15 @@ export class TelegramAdapter implements IPlatformAdapter {
 
   async fetchChannelInfo(platformChannelId: string): Promise<PlatformChannelInfo> {
     const chatId = BigInt(platformChannelId);
-    const stats = await fetchChannelStats(this.bot, chatId);
+    const stats = await fetchDetailedChannelStats(this.bot, chatId);
     return {
       title: stats.title,
       username: stats.username,
       subscribers: stats.subscribers,
       description: stats.description,
+      avgViews: stats.avgViews,
+      avgReach: stats.avgReach,
+      languages: stats.languages,
     };
   }
 
@@ -48,6 +54,37 @@ export class TelegramAdapter implements IPlatformAdapter {
     return verifyMessageExists(this.bot, chatId, messageId);
   }
 
+  async fetchPostMetrics(platformChannelId: string, platformPostId: string): Promise<PostMetrics> {
+    // Telegram Bot API cannot fetch view/like counts — only existence
+    const exists = await this.verifyPostExists(platformChannelId, platformPostId);
+    return { exists };
+  }
+
+  parsePostUrl(url: string): string | null {
+    try {
+      const parsed = new URL(url);
+      if (!parsed.hostname.endsWith('t.me')) return null;
+
+      // t.me/channel/123 or t.me/c/123456/789
+      const parts = parsed.pathname.split('/').filter(Boolean);
+
+      if (parts[0] === 'c' && parts.length >= 3) {
+        // Private channel: t.me/c/<channel_id>/<message_id>
+        return parts[2];
+      }
+
+      if (parts.length >= 2) {
+        // Public channel: t.me/<username>/<message_id>
+        const msgId = parts[parts.length - 1];
+        if (/^\d+$/.test(msgId)) return msgId;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   getPostUrl(platformChannelId: string, platformPostId: string): string {
     // Telegram post URLs use the channel username, but we may not have it here.
     // Fall back to chat ID-based format.
@@ -57,5 +94,15 @@ export class TelegramAdapter implements IPlatformAdapter {
   getChannelUrl(platformChannelId: string, username?: string): string {
     if (username) return `https://t.me/${username}`;
     return `https://t.me/c/${platformChannelId.replace('-100', '')}`;
+  }
+
+  async verifyUserAdmin(platformChannelId: string, platformUserId: string): Promise<boolean> {
+    const chatId = BigInt(platformChannelId);
+    return checkUserIsAdmin(this.bot, chatId, Number(platformUserId));
+  }
+
+  async fetchAdmins(platformChannelId: string) {
+    const chatId = BigInt(platformChannelId);
+    return fetchTelegramChannelAdmins(this.bot, chatId);
   }
 }

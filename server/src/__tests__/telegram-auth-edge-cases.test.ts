@@ -36,29 +36,25 @@ describe('Telegram initData Validation — Edge Cases', () => {
 
   // ==================== auth_date boundary ====================
   describe('auth_date boundary conditions', () => {
-    it('rejects auth_date exactly 300 seconds ago (boundary)', () => {
-      const exactBoundary = Math.floor(Date.now() / 1000) - 300;
+    it('rejects auth_date exactly at 24h boundary', () => {
+      const exactBoundary = Math.floor(Date.now() / 1000) - 86400;
       const params = makeParams(validUser, exactBoundary);
       const initData = signInitData(params);
-      const result = validateInitData(initData);
-      // now - authDate > 300 is false when exactly equal, but
-      // by the time the check runs, a ms has passed → might be > 300
-      // Either null or valid is acceptable at the exact boundary
-      // The key test: 301 must be null
+      // At exact boundary, timing may vary — the key test: past boundary must be null
       const params2 = makeParams(validUser, exactBoundary - 1);
       const initData2 = signInitData(params2);
       expect(validateInitData(initData2)).toBeNull();
     });
 
-    it('rejects auth_date 1 second past boundary (301s ago)', () => {
-      const pastBoundary = Math.floor(Date.now() / 1000) - 301;
+    it('rejects auth_date 1 second past 24h boundary', () => {
+      const pastBoundary = Math.floor(Date.now() / 1000) - 86401;
       const params = makeParams(validUser, pastBoundary);
       const initData = signInitData(params);
       expect(validateInitData(initData)).toBeNull();
     });
 
-    it('accepts auth_date 1 second before boundary (299s ago)', () => {
-      const beforeBoundary = Math.floor(Date.now() / 1000) - 299;
+    it('accepts auth_date 1 second before 24h boundary', () => {
+      const beforeBoundary = Math.floor(Date.now() / 1000) - 86399;
       const params = makeParams(validUser, beforeBoundary);
       const initData = signInitData(params);
       const result = validateInitData(initData);
@@ -83,7 +79,7 @@ describe('Telegram initData Validation — Edge Cases', () => {
       expect(result).not.toBeNull();
     });
 
-    it('rejects auth_date = 0 (Unix epoch) — far older than 5 minutes', () => {
+    it('rejects auth_date = 0 (Unix epoch) — far older than 24 hours', () => {
       const params = makeParams(validUser, 0);
       const initData = signInitData(params);
       expect(validateInitData(initData)).toBeNull();

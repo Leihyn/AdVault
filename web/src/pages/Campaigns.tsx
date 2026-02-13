@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Section, Placeholder, Spinner, Title, Text, Chip } from '@telegram-apps/telegram-ui';
+import { Section, Button, Placeholder, Spinner, Title, Text, Chip } from '@telegram-apps/telegram-ui';
 import { fetchCampaigns } from '../api/client.js';
 import { CampaignCard } from '../components/CampaignCard.js';
 
@@ -19,6 +20,7 @@ const CATEGORIES = [
 ];
 
 export function Campaigns() {
+  const navigate = useNavigate();
   const [language, setLanguage] = useState('');
   const [category, setCategory] = useState('');
 
@@ -38,6 +40,12 @@ export function Campaigns() {
         <Text style={{ color: 'var(--tgui--hint_color)' }}>
           {data?.total !== undefined ? `${data.total} open briefs` : 'Advertiser briefs seeking channels'}
         </Text>
+      </div>
+
+      <div style={{ padding: '0 16px 12px' }}>
+        <Button size="m" mode="bezeled" stretched onClick={() => navigate('/campaigns/new')}>
+          + Create Campaign
+        </Button>
       </div>
 
       <div className="filter-row">

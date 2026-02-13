@@ -20,14 +20,31 @@ enum DealStatus {
   CREATIVE_SUBMITTED
   CREATIVE_REVISION
   CREATIVE_APPROVED
-  SCHEDULED
   POSTED
+  TRACKING
   VERIFIED
   COMPLETED
+  FAILED
   CANCELLED
   REFUNDED
   DISPUTED
   TIMED_OUT
+}
+
+enum MetricType {
+  POST_EXISTS
+  VIEWS
+  LIKES
+  COMMENTS
+  SHARES
+  CUSTOM
+}
+
+enum RequirementStatus {
+  PENDING
+  MET
+  FAILED
+  WAIVED
 }
 
 enum Platform {
@@ -35,6 +52,7 @@ enum Platform {
   YOUTUBE
   INSTAGRAM
   TWITTER
+  TIKTOK
 }
 
 enum AdFormatType {
@@ -110,6 +128,8 @@ model Channel {
   premiumPercentage Decimal   @default(0) @map("premium_percentage") @db.Decimal(10, 4)
   botIsAdmin        Boolean   @default(false) @map("bot_is_admin")
   isVerified        Boolean   @default(false) @map("is_verified")
+  verificationToken String?   @map("verification_token")
+  verifiedAt        DateTime? @map("verified_at")
   statsUpdatedAt    DateTime? @map("stats_updated_at")
   createdAt         DateTime  @default(now()) @map("created_at")
 
@@ -118,11 +138,23 @@ model Channel {
   adFormats         AdFormat[]
   deals             Deal[]
   applications      CampaignApplication[]
+  languageStats     ChannelLanguageStat[]
 
   @@unique([platform, platformChannelId])
   @@index([ownerId])
   @@index([platform])
   @@map("channels")
+}
+
+model ChannelLanguageStat {
+  id         Int     @id @default(autoincrement())
+  channelId  Int     @map("channel_id")
+  language   String
+  percentage Decimal @db.Decimal(5, 2)
+  channel    Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, language])
+  @@map("channel_language_stats")
 }
 
 model ChannelAdmin {
@@ -208,7 +240,14 @@ model Deal {
   advertiserAlias       String     @map("advertiser_alias")
   escrowAddress         String?    @map("escrow_address")
   escrowMnemonicEncrypted String?  @map("escrow_mnemonic_encrypted")
-  scheduledPostAt       DateTime?  @map("scheduled_post_at")
+  verificationWindowHours Int       @default(24) @map("verification_window_hours")
+  brief                 String?    @db.Text
+  assets                Json?      @db.JsonB
+  postProofUrl          String?    @map("post_proof_url")
+  platformPostId        String?    @map("platform_post_id")
+  trackingStartedAt     DateTime?  @map("tracking_started_at")
+  scheduledPostAt        DateTime?  @map("scheduled_post_at")
+  contentHash           String?    @map("content_hash")
   postedMessageId       String?    @map("posted_message_id")
   postedAt              DateTime?  @map("posted_at")
   postVerifiedAt        DateTime?  @map("post_verified_at")
@@ -225,6 +264,8 @@ model Deal {
   transactions          Transaction[]
   events                DealEvent[]
   pendingTransfers      PendingTransfer[]
+  requirements          DealRequirement[]
+  dispute               Dispute?
 
   @@index([channelId])
   @@index([advertiserId])
@@ -325,4 +366,80 @@ model PendingTransfer {
   @@index([dealId])
   @@index([completedAt])
   @@map("pending_transfers")
+}
+
+enum DisputeStatus {
+  OPEN
+  MUTUAL_RESOLUTION
+  ADMIN_REVIEW
+  RESOLVED
+}
+
+enum DisputeOutcome {
+  RELEASE_TO_OWNER
+  REFUND_TO_ADVERTISER
+  SPLIT
+}
+
+model Dispute {
+  id                Int             @id @default(autoincrement())
+  dealId            Int             @unique @map("deal_id")
+  openedById        Int             @map("opened_by_id")
+  reason            String          @db.Text
+  status            DisputeStatus   @default(OPEN)
+
+  /// The outcome each party proposes during mutual resolution
+  ownerProposal     DisputeOutcome? @map("owner_proposal")
+  advertiserProposal DisputeOutcome? @map("advertiser_proposal")
+  ownerSplitPercent  Int?           @map("owner_split_percent")
+  advertiserSplitPercent Int?       @map("advertiser_split_percent")
+
+  /// Final resolution
+  resolvedOutcome   DisputeOutcome? @map("resolved_outcome")
+  resolvedSplitPercent Int?         @map("resolved_split_percent")
+  resolvedById      Int?            @map("resolved_by_id")
+  resolvedReason    String?         @map("resolved_reason") @db.Text
+
+  /// Timeline
+  mutualDeadline    DateTime        @map("mutual_deadline")
+  escalatedAt       DateTime?       @map("escalated_at")
+  resolvedAt        DateTime?       @map("resolved_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  deal              Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  evidence          DisputeEvidence[]
+
+  @@index([status])
+  @@map("disputes")
+}
+
+model DisputeEvidence {
+  id          Int      @id @default(autoincrement())
+  disputeId   Int      @map("dispute_id")
+  submittedById Int    @map("submitted_by_id")
+  description String   @db.Text
+  url         String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  dispute     Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
+}
+
+model DealRequirement {
+  id            Int               @id @default(autoincrement())
+  dealId        Int               @map("deal_id")
+  metricType    MetricType        @map("metric_type")
+  targetValue   Int               @map("target_value")
+  currentValue  Int               @default(0) @map("current_value")
+  status        RequirementStatus @default(PENDING)
+  lastCheckedAt DateTime?         @map("last_checked_at")
+  metAt         DateTime?         @map("met_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  deal          Deal              @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_requirements")
 }

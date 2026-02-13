@@ -144,9 +144,12 @@ describe('Service Layer Integration Tests', () => {
       ).rejects.toThrow(ForbiddenError);
     });
 
-    it('listChannels returns verified channels', async () => {
-      // Mark as verified first
+    it('listChannels returns channels with active formats', async () => {
+      // Mark as verified and create an active format
       await prisma.channel.update({ where: { id: channelId }, data: { isVerified: true } });
+      await prisma.adFormat.create({
+        data: { channelId, formatType: 'POST', label: 'Post', priceTon: 1, isActive: true },
+      });
 
       const result = await listChannels({}, 1, 20);
       expect(result.channels.length).toBeGreaterThanOrEqual(1);

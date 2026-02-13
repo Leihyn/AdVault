@@ -1,6 +1,7 @@
 import { Context } from 'grammy';
 import { PrismaClient } from '@prisma/client';
 import { Bot } from 'grammy';
+import * as channelService from '../../services/channel.service.js';
 
 const prisma = new PrismaClient();
 
@@ -89,31 +90,22 @@ export async function handleAddChannelMessage(ctx: Context, bot: Bot) {
         return;
       }
 
-      // Register the channel
+      // Register the channel with default formats and role upgrade
       const title = 'title' in chat ? chat.title || '' : '';
       const description = 'description' in chat ? chat.description : undefined;
 
-      const channel = await prisma.channel.create({
-        data: {
-          telegramChatId: BigInt(chat.id),
-          ownerId: user.id,
-          title,
-          description: description || undefined,
-          username: username,
-          subscribers: memberCount,
-          botIsAdmin,
-          isVerified: botIsAdmin,
-          statsUpdatedAt: new Date(),
-        },
+      const { channel, formatsCreated, defaults } = await channelService.createChannelWithDefaults({
+        platform: 'TELEGRAM',
+        telegramChatId: BigInt(chat.id),
+        platformChannelId: String(chat.id),
+        ownerId: user.id,
+        title,
+        description: description || undefined,
+        username,
+        subscribers: memberCount,
+        botIsAdmin,
+        isVerified: botIsAdmin,
       });
-
-      // Update user role if needed
-      if (user.role === 'ADVERTISER') {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { role: 'BOTH' },
-        });
-      }
 
       userStates.delete(ctx.from.id);
 
@@ -126,7 +118,8 @@ export async function handleAddChannelMessage(ctx: Context, bot: Bot) {
         text += `The bot is not an admin yet. Add the bot as an admin to enable auto-posting.\n\n`;
       }
 
-      text += `Next: set your ad formats and pricing in the Mini App.`;
+      text += `${formatsCreated} ad formats created (${defaults.map((f) => f.label).join(', ')}).\n`;
+      text += `Open the Mini App to set your prices and go live.`;
       await ctx.reply(text);
     } catch (error: any) {
       userStates.delete(ctx.from.id);

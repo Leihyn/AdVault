@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // --- Channel Schemas ---
-export const platformEnum = z.enum(['TELEGRAM', 'YOUTUBE', 'INSTAGRAM', 'TWITTER']);
+export const platformEnum = z.enum(['TELEGRAM', 'YOUTUBE', 'INSTAGRAM', 'TWITTER', 'TIKTOK']);
 
 export const createChannelSchema = z.object({
   platform: platformEnum.default('TELEGRAM'),
@@ -11,19 +11,24 @@ export const createChannelSchema = z.object({
   description: z.string().max(2000).optional(),
   username: z.string().max(255).optional(),
   language: z.string().max(10).optional(),
-  category: z.string().max(50).optional(),
+  category: z.string().max(100).optional(),
 }).refine(
   (data) => {
     if (data.platform === 'TELEGRAM') return data.telegramChatId != null || data.platformChannelId != null;
+    // For Instagram/Twitter/TikTok, accept username as identifier
+    if (data.platform === 'INSTAGRAM' || data.platform === 'TWITTER' || data.platform === 'TIKTOK') {
+      return data.platformChannelId != null || data.username != null;
+    }
     return data.platformChannelId != null;
   },
-  { message: 'platformChannelId is required (or telegramChatId for Telegram channels)' },
+  { message: 'platformChannelId is required (or telegramChatId for Telegram, username for Instagram/Twitter)' },
 );
 
 export const updateChannelSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional(),
   language: z.string().max(10).optional(),
-  category: z.string().max(50).optional(),
+  category: z.string().max(100).optional(),
 });
 
 export const channelFiltersSchema = z.object({
@@ -31,7 +36,7 @@ export const channelFiltersSchema = z.object({
   minSubscribers: z.coerce.number().int().nonnegative().max(100_000_000).optional(),
   maxSubscribers: z.coerce.number().int().nonnegative().max(100_000_000).optional(),
   language: z.string().max(10).optional(),
-  category: z.string().max(50).optional(),
+  category: z.string().max(100).optional(),
   minPrice: z.coerce.number().nonnegative().max(1_000_000).optional(),
   maxPrice: z.coerce.number().nonnegative().max(1_000_000).optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -43,6 +48,13 @@ export const addAdFormatSchema = z.object({
   label: z.string().min(1).max(100),
   description: z.string().max(1000).optional(),
   priceTon: z.number().positive().max(1_000_000),
+});
+
+export const updateAdFormatSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  description: z.string().max(1000).optional(),
+  priceTon: z.number().nonnegative().max(1_000_000).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const addAdminSchema = z.object({
@@ -90,19 +102,55 @@ export const applyToCampaignSchema = z.object({
 });
 
 // --- Deal Schemas ---
+export const metricTypeEnum = z.enum(['POST_EXISTS', 'VIEWS', 'LIKES', 'COMMENTS', 'SHARES', 'CUSTOM']);
+
+export const requirementSchema = z.object({
+  metricType: metricTypeEnum,
+  targetValue: z.number().int().positive(),
+});
+
+export const assetSchema = z.object({
+  label: z.string().min(1).max(50),
+  value: z.string().min(1).max(2000),
+});
+
 export const createDealSchema = z.object({
   channelId: z.number().int().positive(),
   adFormatId: z.number().int().positive(),
   campaignId: z.number().int().positive().optional(),
   amountTon: z.number().positive().max(1_000_000),
+  verificationWindowHours: z.number().int().min(1).max(720).default(24),
+  requirements: z.array(requirementSchema).max(10).optional(),
+  brief: z.string().max(5000).optional(),
+  assets: z.array(assetSchema).max(10).optional(),
 });
 
-export const scheduleDealSchema = z.object({
+export const submitPostProofSchema = z.object({
+  postUrl: z.string().url(),
+});
+
+export const schedulePostSchema = z.object({
   scheduledPostAt: z.string().datetime(),
 });
 
 export const disputeDealSchema = z.object({
   reason: z.string().min(1).max(2000),
+});
+
+export const disputeEvidenceSchema = z.object({
+  description: z.string().min(1).max(5000),
+  url: z.string().url().max(2048).optional(),
+});
+
+export const disputeProposalSchema = z.object({
+  outcome: z.enum(['RELEASE_TO_OWNER', 'REFUND_TO_ADVERTISER', 'SPLIT']),
+  splitPercent: z.number().int().min(0).max(100).optional(),
+});
+
+export const adminResolveSchema = z.object({
+  outcome: z.enum(['RELEASE_TO_OWNER', 'REFUND_TO_ADVERTISER', 'SPLIT']),
+  reason: z.string().min(1).max(2000),
+  splitPercent: z.number().int().min(0).max(100).optional(),
 });
 
 // --- Creative Schemas ---

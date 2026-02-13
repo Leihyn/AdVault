@@ -10,7 +10,7 @@ import {
   campaignFiltersSchema,
   applyToCampaignSchema,
   createDealSchema,
-  scheduleDealSchema,
+  submitPostProofSchema,
   disputeDealSchema,
   submitCreativeSchema,
   revisionSchema,
@@ -221,6 +221,7 @@ describe('Zod Validation Schemas', () => {
       expect(result.channelId).toBe(1);
       expect(result.amountTon).toBe(50);
       expect(result.campaignId).toBeUndefined();
+      expect(result.verificationWindowHours).toBe(24);
     });
 
     it('accepts optional campaignId', () => {
@@ -233,6 +234,48 @@ describe('Zod Validation Schemas', () => {
       expect(result.campaignId).toBe(3);
     });
 
+    it('accepts verificationWindowHours', () => {
+      const result = createDealSchema.parse({
+        channelId: 1,
+        adFormatId: 2,
+        amountTon: 50,
+        verificationWindowHours: 48,
+      });
+      expect(result.verificationWindowHours).toBe(48);
+    });
+
+    it('rejects verificationWindowHours out of range', () => {
+      expect(() => createDealSchema.parse({
+        channelId: 1, adFormatId: 2, amountTon: 50,
+        verificationWindowHours: 0,
+      })).toThrow();
+      expect(() => createDealSchema.parse({
+        channelId: 1, adFormatId: 2, amountTon: 50,
+        verificationWindowHours: 721,
+      })).toThrow();
+    });
+
+    it('accepts requirements array', () => {
+      const result = createDealSchema.parse({
+        channelId: 1,
+        adFormatId: 2,
+        amountTon: 50,
+        requirements: [
+          { metricType: 'VIEWS', targetValue: 1000 },
+          { metricType: 'POST_EXISTS', targetValue: 1 },
+        ],
+      });
+      expect(result.requirements).toHaveLength(2);
+      expect(result.requirements![0].metricType).toBe('VIEWS');
+    });
+
+    it('rejects invalid metric type', () => {
+      expect(() => createDealSchema.parse({
+        channelId: 1, adFormatId: 2, amountTon: 50,
+        requirements: [{ metricType: 'INVALID', targetValue: 100 }],
+      })).toThrow();
+    });
+
     it('rejects negative amount', () => {
       expect(() => createDealSchema.parse({
         channelId: 1,
@@ -242,17 +285,17 @@ describe('Zod Validation Schemas', () => {
     });
   });
 
-  describe('scheduleDealSchema', () => {
-    it('accepts valid ISO datetime', () => {
-      const result = scheduleDealSchema.parse({
-        scheduledPostAt: '2025-06-15T14:00:00.000Z',
+  describe('submitPostProofSchema', () => {
+    it('accepts valid URL', () => {
+      const result = submitPostProofSchema.parse({
+        postUrl: 'https://t.me/mychannel/123',
       });
-      expect(result.scheduledPostAt).toBe('2025-06-15T14:00:00.000Z');
+      expect(result.postUrl).toBe('https://t.me/mychannel/123');
     });
 
-    it('rejects invalid datetime', () => {
-      expect(() => scheduleDealSchema.parse({
-        scheduledPostAt: 'not-a-date',
+    it('rejects invalid URL', () => {
+      expect(() => submitPostProofSchema.parse({
+        postUrl: 'not-a-url',
       })).toThrow();
     });
   });

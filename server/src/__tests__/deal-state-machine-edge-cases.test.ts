@@ -8,11 +8,12 @@ const VALID_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   CREATIVE_PENDING: ['CREATIVE_SUBMITTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
   CREATIVE_SUBMITTED: ['CREATIVE_APPROVED', 'CREATIVE_REVISION', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
   CREATIVE_REVISION: ['CREATIVE_SUBMITTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
-  CREATIVE_APPROVED: ['SCHEDULED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
-  SCHEDULED: ['POSTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
-  POSTED: ['VERIFIED', 'DISPUTED', 'TIMED_OUT'],
+  CREATIVE_APPROVED: ['POSTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
+  POSTED: ['TRACKING', 'DISPUTED', 'TIMED_OUT'],
+  TRACKING: ['VERIFIED', 'FAILED', 'DISPUTED', 'TIMED_OUT'],
   VERIFIED: ['COMPLETED'],
   COMPLETED: [],
+  FAILED: ['REFUNDED', 'DISPUTED'],
   CANCELLED: [],
   REFUNDED: [],
   DISPUTED: ['REFUNDED', 'COMPLETED'],
@@ -25,15 +26,16 @@ const STATUS_TIMEOUTS: Partial<Record<DealStatus, number>> = {
   CREATIVE_PENDING: 72,
   CREATIVE_SUBMITTED: 96,
   CREATIVE_REVISION: 72,
+  CREATIVE_APPROVED: 168,
 };
 
 const ALL_STATUSES: DealStatus[] = Object.keys(VALID_TRANSITIONS) as DealStatus[];
 
-const TERMINAL_STATUSES: DealStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'TIMED_OUT'];
+const TERMINAL_STATUSES: DealStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'FAILED', 'TIMED_OUT'];
 
 const REFUNDABLE_STATUSES: DealStatus[] = [
   'FUNDED', 'CREATIVE_PENDING', 'CREATIVE_SUBMITTED',
-  'CREATIVE_REVISION', 'CREATIVE_APPROVED', 'SCHEDULED',
+  'CREATIVE_REVISION', 'CREATIVE_APPROVED',
 ];
 
 function canTransition(from: DealStatus, to: DealStatus): boolean {
@@ -64,17 +66,19 @@ describe('Deal State Machine — Edge Cases', () => {
       }
     });
 
-    it('total number of statuses is exactly 14', () => {
-      expect(ALL_STATUSES).toHaveLength(14);
+    it('total number of statuses is exactly 15', () => {
+      expect(ALL_STATUSES).toHaveLength(15);
     });
 
-    it('terminal statuses have no outgoing transitions except TIMED_OUT and DISPUTED', () => {
+    it('terminal statuses have no outgoing transitions except TIMED_OUT, DISPUTED, and FAILED', () => {
       // COMPLETED, CANCELLED, REFUNDED have zero transitions
       expect(VALID_TRANSITIONS['COMPLETED']).toHaveLength(0);
       expect(VALID_TRANSITIONS['CANCELLED']).toHaveLength(0);
       expect(VALID_TRANSITIONS['REFUNDED']).toHaveLength(0);
       // TIMED_OUT has exactly one: REFUNDED
       expect(VALID_TRANSITIONS['TIMED_OUT']).toHaveLength(1);
+      // FAILED has exactly two: REFUNDED, DISPUTED
+      expect(VALID_TRANSITIONS['FAILED']).toHaveLength(2);
     });
   });
 
@@ -148,15 +152,14 @@ describe('Deal State Machine — Edge Cases', () => {
       expect(STATUS_TIMEOUTS['PENDING_PAYMENT']).toBe(Math.min(...values));
     });
 
-    it('CREATIVE_SUBMITTED has longest timeout (more review time)', () => {
+    it('CREATIVE_APPROVED has longest timeout (7 days for creator to post)', () => {
       const values = Object.values(STATUS_TIMEOUTS) as number[];
-      expect(STATUS_TIMEOUTS['CREATIVE_SUBMITTED']).toBe(Math.max(...values));
+      expect(STATUS_TIMEOUTS['CREATIVE_APPROVED']).toBe(Math.max(...values));
     });
 
-    it('statuses beyond creative phase have no timeout (verified by absence)', () => {
-      expect(STATUS_TIMEOUTS['CREATIVE_APPROVED']).toBeUndefined();
-      expect(STATUS_TIMEOUTS['SCHEDULED']).toBeUndefined();
+    it('post-tracking statuses have no static timeout (verification window is per-deal)', () => {
       expect(STATUS_TIMEOUTS['POSTED']).toBeUndefined();
+      expect(STATUS_TIMEOUTS['TRACKING']).toBeUndefined();
       expect(STATUS_TIMEOUTS['VERIFIED']).toBeUndefined();
     });
 
@@ -183,7 +186,7 @@ describe('Deal State Machine — Edge Cases', () => {
     it('dispute can be raised from all funded non-terminal statuses', () => {
       const disputeableStatuses: DealStatus[] = [
         'FUNDED', 'CREATIVE_PENDING', 'CREATIVE_SUBMITTED',
-        'CREATIVE_REVISION', 'CREATIVE_APPROVED', 'SCHEDULED', 'POSTED',
+        'CREATIVE_REVISION', 'CREATIVE_APPROVED', 'POSTED', 'TRACKING',
       ];
       for (const status of disputeableStatuses) {
         expect(canTransition(status, 'DISPUTED')).toBe(true);
@@ -198,8 +201,12 @@ describe('Deal State Machine — Edge Cases', () => {
       expect(canTransition('VERIFIED', 'DISPUTED')).toBe(false);
     });
 
-    it('cannot dispute from terminal states', () => {
-      for (const terminal of TERMINAL_STATUSES) {
+    it('can dispute from FAILED (advertiser disagrees with failure)', () => {
+      expect(canTransition('FAILED', 'DISPUTED')).toBe(true);
+    });
+
+    it('cannot dispute from true terminal states', () => {
+      for (const terminal of ['COMPLETED', 'CANCELLED', 'REFUNDED'] as DealStatus[]) {
         expect(canTransition(terminal, 'DISPUTED')).toBe(false);
       }
     });
@@ -220,6 +227,14 @@ describe('Deal State Machine — Edge Cases', () => {
 
     it('POSTED is not directly refundable (must dispute first)', () => {
       expect(canTransition('POSTED', 'REFUNDED')).toBe(false);
+    });
+
+    it('TRACKING is not directly refundable (must fail or dispute first)', () => {
+      expect(canTransition('TRACKING', 'REFUNDED')).toBe(false);
+    });
+
+    it('FAILED can be refunded', () => {
+      expect(canTransition('FAILED', 'REFUNDED')).toBe(true);
     });
 
     it('TIMED_OUT can be refunded (separate from normal refund flow)', () => {
@@ -249,7 +264,6 @@ describe('Deal State Machine — Edge Cases', () => {
     }
 
     it('shortest path to COMPLETED from PENDING_PAYMENT is 4 steps (via DISPUTED)', () => {
-      // PENDING_PAYMENT → FUNDED → DISPUTED → COMPLETED
       const path = findShortestPath('PENDING_PAYMENT', 'COMPLETED');
       expect(path).not.toBeNull();
       expect(path!).toHaveLength(4);
@@ -266,23 +280,10 @@ describe('Deal State Machine — Edge Cases', () => {
       expect(path).toEqual(['FUNDED', 'REFUNDED']);
     });
 
-    it('shortest path to COMPLETED through DISPUTED is 4 steps minimum', () => {
-      // PENDING_PAYMENT → FUNDED → DISPUTED → COMPLETED
-      const path = findShortestPath('PENDING_PAYMENT', 'COMPLETED');
-      // The shortest through DISPUTED would be:
-      // PENDING_PAYMENT → FUNDED → DISPUTED → COMPLETED = 4 steps
-      // But normal happy path is shorter (9 steps) — check both exist
-      expect(path).not.toBeNull();
-
-      // Also verify the dispute path exists
-      expect(canTransition('FUNDED', 'DISPUTED')).toBe(true);
-      expect(canTransition('DISPUTED', 'COMPLETED')).toBe(true);
-    });
-
     it('REFUNDED is reachable from every funded status', () => {
       const fundedStatuses: DealStatus[] = [
         'FUNDED', 'CREATIVE_PENDING', 'CREATIVE_SUBMITTED',
-        'CREATIVE_REVISION', 'CREATIVE_APPROVED', 'SCHEDULED',
+        'CREATIVE_REVISION', 'CREATIVE_APPROVED',
       ];
       for (const status of fundedStatuses) {
         const path = findShortestPath(status, 'REFUNDED');
@@ -298,6 +299,12 @@ describe('Deal State Machine — Edge Cases', () => {
     it('COMPLETED is unreachable from REFUNDED (terminal)', () => {
       const path = findShortestPath('REFUNDED', 'COMPLETED');
       expect(path).toBeNull();
+    });
+
+    it('REFUNDED is reachable from TRACKING through FAILED', () => {
+      const path = findShortestPath('TRACKING', 'REFUNDED');
+      expect(path).not.toBeNull();
+      expect(path!).toContain('FAILED');
     });
   });
 
@@ -327,7 +334,7 @@ describe('Deal State Machine — Edge Cases', () => {
       const activeStatuses: DealStatus[] = [
         'PENDING_PAYMENT', 'FUNDED', 'CREATIVE_PENDING',
         'CREATIVE_SUBMITTED', 'CREATIVE_REVISION', 'CREATIVE_APPROVED',
-        'SCHEDULED', 'POSTED',
+        'POSTED', 'TRACKING',
       ];
       for (const status of activeStatuses) {
         expect(canTransition(status, 'TIMED_OUT')).toBe(true);
@@ -367,8 +374,42 @@ describe('Deal State Machine — Edge Cases', () => {
       expect(canTransition('POSTED', 'REFUNDED')).toBe(false);
     });
 
-    it('POSTED can only go to VERIFIED, DISPUTED, or TIMED_OUT', () => {
-      expect(VALID_TRANSITIONS['POSTED']).toEqual(['VERIFIED', 'DISPUTED', 'TIMED_OUT']);
+    it('POSTED can only go to TRACKING, DISPUTED, or TIMED_OUT', () => {
+      expect(VALID_TRANSITIONS['POSTED']).toEqual(['TRACKING', 'DISPUTED', 'TIMED_OUT']);
+    });
+  });
+
+  // ==================== Guard: TRACKING restrictions ====================
+  describe('TRACKING status restrictions', () => {
+    it('TRACKING cannot be cancelled', () => {
+      expect(canTransition('TRACKING', 'CANCELLED')).toBe(false);
+    });
+
+    it('TRACKING cannot be refunded directly', () => {
+      expect(canTransition('TRACKING', 'REFUNDED')).toBe(false);
+    });
+
+    it('TRACKING can go to VERIFIED, FAILED, DISPUTED, or TIMED_OUT', () => {
+      expect(VALID_TRANSITIONS['TRACKING']).toEqual(['VERIFIED', 'FAILED', 'DISPUTED', 'TIMED_OUT']);
+    });
+  });
+
+  // ==================== FAILED status behavior ====================
+  describe('FAILED status behavior', () => {
+    it('FAILED is quasi-terminal: can only go to REFUNDED or DISPUTED', () => {
+      expect(VALID_TRANSITIONS['FAILED']).toEqual(['REFUNDED', 'DISPUTED']);
+    });
+
+    it('FAILED cannot go back to TRACKING', () => {
+      expect(canTransition('FAILED', 'TRACKING')).toBe(false);
+    });
+
+    it('FAILED cannot be cancelled', () => {
+      expect(canTransition('FAILED', 'CANCELLED')).toBe(false);
+    });
+
+    it('FAILED cannot go directly to COMPLETED', () => {
+      expect(canTransition('FAILED', 'COMPLETED')).toBe(false);
     });
   });
 });

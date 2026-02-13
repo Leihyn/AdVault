@@ -17,7 +17,7 @@ export async function listCampaigns(filters: CampaignFilters, page = 1, limit = 
   if (filters.minBudget) where.budgetTon = { ...where.budgetTon, gte: filters.minBudget };
   if (filters.maxBudget) where.budgetTon = { ...where.budgetTon, lte: filters.maxBudget };
   if (filters.targetLanguage) where.targetLanguage = filters.targetLanguage;
-  if (filters.targetCategory) where.targetCategory = filters.targetCategory;
+  if (filters.targetCategory) where.targetCategory = { contains: filters.targetCategory };
 
   const [campaigns, total] = await Promise.all([
     prisma.campaign.findMany({

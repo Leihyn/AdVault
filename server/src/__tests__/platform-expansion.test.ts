@@ -7,8 +7,7 @@ import {
   getChannelsByOwner,
   addAdFormat,
 } from '../services/channel.service.js';
-import { markAsPosted, markAsVerified } from '../services/posting.service.js';
-import { createDeal, getDeal, getScheduledDeals, getPostedDeals, transitionDeal } from '../services/deal.service.js';
+import { createDeal, getDeal, getTrackingDeals, transitionDeal } from '../services/deal.service.js';
 import { platformRegistry } from '../platforms/registry.js';
 import { TelegramAdapter } from '../platforms/telegram.adapter.js';
 import { YouTubeAdapter } from '../platforms/youtube.adapter.js';
@@ -162,68 +161,76 @@ describe('Cross-Platform Expansion Tests', () => {
   });
 
   // ==================== Instagram Adapter (Stub) ====================
-  describe('InstagramAdapter (stub)', () => {
+  describe('InstagramAdapter', () => {
     it('has correct platform identifier', () => {
       const adapter = new InstagramAdapter();
       expect(adapter.platform).toBe(PlatformEnum.INSTAGRAM);
     });
 
-    it('fetchChannelInfo throws coming soon', async () => {
+    it('fetchChannelInfo returns minimal info for manual registration', async () => {
       const adapter = new InstagramAdapter();
-      await expect(adapter.fetchChannelInfo('test')).rejects.toThrow('coming soon');
+      const info = await adapter.fetchChannelInfo('testuser');
+      expect(info.title).toBe('testuser');
+      expect(info.subscribers).toBe(0);
     });
 
-    it('canPost throws coming soon', async () => {
+    it('canPost returns false (manual uploads only)', async () => {
       const adapter = new InstagramAdapter();
-      await expect(adapter.canPost('test')).rejects.toThrow('coming soon');
+      expect(await adapter.canPost('test')).toBe(false);
     });
 
-    it('publishPost throws coming soon', async () => {
+    it('publishPost throws not supported', async () => {
       const adapter = new InstagramAdapter();
-      await expect(adapter.publishPost('test', 'text')).rejects.toThrow('coming soon');
+      await expect(adapter.publishPost('test', 'text')).rejects.toThrow('does not support automated posting');
     });
 
-    it('verifyPostExists throws coming soon', async () => {
+    it('parsePostUrl extracts post shortcode', () => {
       const adapter = new InstagramAdapter();
-      await expect(adapter.verifyPostExists('test', '123')).rejects.toThrow('coming soon');
+      expect(adapter.parsePostUrl('https://www.instagram.com/p/ABC123/')).toBe('ABC123');
+      expect(adapter.parsePostUrl('https://www.instagram.com/reel/XYZ789/')).toBe('XYZ789');
+      expect(adapter.parsePostUrl('https://example.com/p/test')).toBeNull();
     });
 
     it('getPostUrl returns valid Instagram URL', () => {
       const adapter = new InstagramAdapter();
-      expect(adapter.getPostUrl('testuser', 'ABC123')).toBe('https://www.instagram.com/p/ABC123');
+      expect(adapter.getPostUrl('testuser', 'ABC123')).toBe('https://www.instagram.com/p/ABC123/');
     });
 
     it('getChannelUrl returns valid Instagram URL with username', () => {
       const adapter = new InstagramAdapter();
-      expect(adapter.getChannelUrl('12345', 'testuser')).toBe('https://www.instagram.com/testuser');
+      expect(adapter.getChannelUrl('12345', 'testuser')).toBe('https://www.instagram.com/testuser/');
     });
   });
 
-  // ==================== Twitter Adapter (Stub) ====================
-  describe('TwitterAdapter (stub)', () => {
+  // ==================== Twitter Adapter ====================
+  describe('TwitterAdapter', () => {
     it('has correct platform identifier', () => {
       const adapter = new TwitterAdapter();
       expect(adapter.platform).toBe(PlatformEnum.TWITTER);
     });
 
-    it('fetchChannelInfo throws coming soon', async () => {
+    it('fetchChannelInfo returns minimal info for manual registration', async () => {
       const adapter = new TwitterAdapter();
-      await expect(adapter.fetchChannelInfo('test')).rejects.toThrow('coming soon');
+      const info = await adapter.fetchChannelInfo('elonmusk');
+      expect(info.title).toBe('elonmusk');
+      expect(info.subscribers).toBe(0);
     });
 
-    it('canPost throws coming soon', async () => {
+    it('canPost returns false (manual posting only)', async () => {
       const adapter = new TwitterAdapter();
-      await expect(adapter.canPost('test')).rejects.toThrow('coming soon');
+      expect(await adapter.canPost('test')).toBe(false);
     });
 
-    it('publishPost throws coming soon', async () => {
+    it('publishPost throws not supported', async () => {
       const adapter = new TwitterAdapter();
-      await expect(adapter.publishPost('test', 'text')).rejects.toThrow('coming soon');
+      await expect(adapter.publishPost('test', 'text')).rejects.toThrow('does not support automated posting');
     });
 
-    it('verifyPostExists throws coming soon', async () => {
+    it('parsePostUrl extracts tweet ID from twitter.com and x.com', () => {
       const adapter = new TwitterAdapter();
-      await expect(adapter.verifyPostExists('test', '123')).rejects.toThrow('coming soon');
+      expect(adapter.parsePostUrl('https://twitter.com/elonmusk/status/123456789')).toBe('123456789');
+      expect(adapter.parsePostUrl('https://x.com/elonmusk/status/123456789')).toBe('123456789');
+      expect(adapter.parsePostUrl('https://example.com/status/123')).toBeNull();
     });
 
     it('getPostUrl returns valid X/Twitter URL', () => {
@@ -326,11 +333,20 @@ describe('Cross-Platform Expansion Tests', () => {
         expect(result.success).toBe(false);
       });
 
-      it('rejects invalid platform value', () => {
+      it('accepts TIKTOK platform with username', () => {
         const result = createChannelSchema.safeParse({
           platform: 'TIKTOK',
-          platformChannelId: 'test',
+          username: 'testuser',
           title: 'TikTok Channel',
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('rejects invalid platform value', () => {
+        const result = createChannelSchema.safeParse({
+          platform: 'SNAPCHAT',
+          platformChannelId: 'test',
+          title: 'Snapchat Channel',
         });
         expect(result.success).toBe(false);
       });
@@ -365,12 +381,12 @@ describe('Cross-Platform Expansion Tests', () => {
       });
 
       it('rejects invalid platform in filter', () => {
-        const result = channelFiltersSchema.safeParse({ platform: 'TIKTOK' });
+        const result = channelFiltersSchema.safeParse({ platform: 'SNAPCHAT' });
         expect(result.success).toBe(false);
       });
 
       it('accepts all valid platform values in filter', () => {
-        for (const p of ['TELEGRAM', 'YOUTUBE', 'INSTAGRAM', 'TWITTER']) {
+        for (const p of ['TELEGRAM', 'YOUTUBE', 'INSTAGRAM', 'TWITTER', 'TIKTOK']) {
           const result = channelFiltersSchema.safeParse({ platform: p });
           expect(result.success).toBe(true);
         }
@@ -525,11 +541,17 @@ describe('Cross-Platform Expansion Tests', () => {
     });
 
     it('listChannels filters by platform', async () => {
-      // First verify all channels so they show up in listings
+      // Verify all channels and add active formats so they show up in listings
+      const channels = await prisma.channel.findMany({ where: { ownerId } });
       await prisma.channel.updateMany({
         where: { ownerId },
         data: { isVerified: true },
       });
+      for (const ch of channels) {
+        await prisma.adFormat.create({
+          data: { channelId: ch.id, formatType: 'POST', label: 'Post', priceTon: 1, isActive: true },
+        });
+      }
 
       const ytResult = await listChannels({ platform: 'YOUTUBE' });
       expect(ytResult.channels.length).toBeGreaterThanOrEqual(1);
@@ -669,60 +691,88 @@ describe('Cross-Platform Expansion Tests', () => {
       expect(deal.channel.platformChannelId).toBe(String(-100900099n));
     });
 
-    it('postedMessageId accepts string values (platform-agnostic)', async () => {
-      // Transition YouTube deal through to POSTED
+    it('platformPostId accepts string values (platform-agnostic)', async () => {
+      // Transition YouTube deal through to TRACKING
       await transitionDeal(ytDealId, 'FUNDED');
       await transitionDeal(ytDealId, 'CREATIVE_PENDING');
       await transitionDeal(ytDealId, 'CREATIVE_SUBMITTED');
       await transitionDeal(ytDealId, 'CREATIVE_APPROVED');
-      await transitionDeal(ytDealId, 'SCHEDULED');
 
-      // markAsPosted with a YouTube video ID (string)
-      await markAsPosted(ytDealId, 'dQw4w9WgXcQ');
+      // Simulate post proof submission
+      await prisma.deal.update({
+        where: { id: ytDealId },
+        data: {
+          platformPostId: 'dQw4w9WgXcQ',
+          postProofUrl: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+          postedMessageId: 'dQw4w9WgXcQ',
+          postedAt: new Date(),
+          trackingStartedAt: new Date(),
+        },
+      });
+      await transitionDeal(ytDealId, 'POSTED');
+      await transitionDeal(ytDealId, 'TRACKING');
 
       const deal = await prisma.deal.findUnique({ where: { id: ytDealId } });
-      expect(deal!.postedMessageId).toBe('dQw4w9WgXcQ');
-      expect(deal!.status).toBe('POSTED');
+      expect(deal!.platformPostId).toBe('dQw4w9WgXcQ');
+      expect(deal!.status).toBe('TRACKING');
       expect(deal!.postedAt).not.toBeNull();
     });
 
-    it('postedMessageId accepts numeric-string values for Telegram', async () => {
+    it('platformPostId accepts numeric-string values for Telegram', async () => {
       await transitionDeal(tgDealId, 'FUNDED');
       await transitionDeal(tgDealId, 'CREATIVE_PENDING');
       await transitionDeal(tgDealId, 'CREATIVE_SUBMITTED');
       await transitionDeal(tgDealId, 'CREATIVE_APPROVED');
-      await transitionDeal(tgDealId, 'SCHEDULED');
 
-      await markAsPosted(tgDealId, '12345');
+      await prisma.deal.update({
+        where: { id: tgDealId },
+        data: {
+          platformPostId: '12345',
+          postProofUrl: 'https://t.me/channel/12345',
+          postedMessageId: '12345',
+          postedAt: new Date(),
+          trackingStartedAt: new Date(),
+        },
+      });
+      await transitionDeal(tgDealId, 'POSTED');
+      await transitionDeal(tgDealId, 'TRACKING');
 
       const deal = await prisma.deal.findUnique({ where: { id: tgDealId } });
-      expect(deal!.postedMessageId).toBe('12345');
-      expect(deal!.status).toBe('POSTED');
+      expect(deal!.platformPostId).toBe('12345');
+      expect(deal!.status).toBe('TRACKING');
     });
 
-    it('getPostedDeals returns deals with platform info', async () => {
-      const posted = await getPostedDeals();
-      expect(posted.length).toBeGreaterThanOrEqual(2);
+    it('getTrackingDeals returns deals with platform info', async () => {
+      const tracking = await getTrackingDeals();
+      expect(tracking.length).toBeGreaterThanOrEqual(2);
 
-      const ytDeal = posted.find((d) => d.id === ytDealId);
+      const ytDeal = tracking.find((d) => d.id === ytDealId);
       expect(ytDeal).toBeDefined();
       expect(ytDeal!.channel.platform).toBe('YOUTUBE');
       expect(ytDeal!.channel.platformChannelId).toBe('UC_DealTestYT');
 
-      const tgDeal = posted.find((d) => d.id === tgDealId);
+      const tgDeal = tracking.find((d) => d.id === tgDealId);
       expect(tgDeal).toBeDefined();
       expect(tgDeal!.channel.platform).toBe('TELEGRAM');
     });
 
-    it('markAsVerified works for YouTube deal', async () => {
-      await markAsVerified(ytDealId);
+    it('TRACKING → VERIFIED works for YouTube deal', async () => {
+      await prisma.deal.update({
+        where: { id: ytDealId },
+        data: { postVerifiedAt: new Date() },
+      });
+      await transitionDeal(ytDealId, 'VERIFIED');
       const deal = await prisma.deal.findUnique({ where: { id: ytDealId } });
       expect(deal!.status).toBe('VERIFIED');
       expect(deal!.postVerifiedAt).not.toBeNull();
     });
 
-    it('markAsVerified works for Telegram deal', async () => {
-      await markAsVerified(tgDealId);
+    it('TRACKING → VERIFIED works for Telegram deal', async () => {
+      await prisma.deal.update({
+        where: { id: tgDealId },
+        data: { postVerifiedAt: new Date() },
+      });
+      await transitionDeal(tgDealId, 'VERIFIED');
       const deal = await prisma.deal.findUnique({ where: { id: tgDealId } });
       expect(deal!.status).toBe('VERIFIED');
     });

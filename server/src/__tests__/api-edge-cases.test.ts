@@ -254,7 +254,9 @@ describe('API Edge Cases', () => {
       { method: 'POST' as const, url: '/api/deals/1/creative' },
       { method: 'POST' as const, url: '/api/deals/1/creative/approve' },
       { method: 'POST' as const, url: '/api/deals/1/creative/revision' },
-      { method: 'POST' as const, url: '/api/deals/1/creative/schedule' },
+      { method: 'POST' as const, url: '/api/deals/1/post-proof' },
+      { method: 'POST' as const, url: '/api/deals/1/requirements/1/waive' },
+      { method: 'POST' as const, url: '/api/deals/1/requirements/1/confirm' },
       { method: 'GET' as const, url: '/api/deals/1/creatives' },
       { method: 'GET' as const, url: '/api/deals/1/receipt' },
     ];

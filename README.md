@@ -361,7 +361,7 @@ All Mini App routes validate Telegram `initData` via the `x-telegram-init-data` 
 
 ## Testing
 
-647+ tests covering the full stack:
+731 tests covering the full stack:
 
 ```bash
 cd server

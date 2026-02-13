@@ -8,7 +8,7 @@ export async function statsRoutes(app: FastifyInstance) {
   // Get platform stats (public)
   app.get('/api/stats', async () => {
     const [channelCount, dealCount, completedDeals] = await Promise.all([
-      prisma.channel.count({ where: { isVerified: true } }),
+      prisma.channel.count(),
       prisma.deal.count(),
       prisma.deal.count({ where: { status: 'COMPLETED' } }),
     ]);

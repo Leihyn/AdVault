@@ -49,6 +49,15 @@ export function decryptField(encryptedStr: string): string {
 }
 
 /**
+ * Creates a SHA-256 hash of creative content for edit detection.
+ * Used to detect if a posted message was modified after posting.
+ */
+export function hashCreativeContent(contentText: string, mediaUrl: string): string {
+  const payload = `${contentText}|${mediaUrl}`;
+  return createHash('sha256').update(payload).digest('hex');
+}
+
+/**
  * Creates a SHA-256 hash of deal data for the receipt.
  * The receipt proves a deal existed and completed without storing the raw data.
  */

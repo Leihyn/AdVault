@@ -1,81 +1,79 @@
-# Project Overview
+# escrowBUILD -- Project Overview
 
-## What It Is
-
-Telegram channel advertising runs on trust — advertisers pay upfront hoping posts go live, channel owners deliver hoping payment clears, and intermediaries take 30% cuts. escrowBUILD replaces all of that with TON-based escrow: funds lock on-chain until the ad is posted, verified after 24 hours, and automatically released. No middlemen, no trust required.
-
-The platform is a Telegram Mini App with a bot interface. It supports cross-platform ad deals — Telegram channels (full automation), YouTube (manual posting with API verification), and stubs for Instagram and Twitter.
+Telegram channel advertising runs on trust. Advertisers wire money and hope the post goes live. Channel owners deliver content and hope the payment clears. There's no escrow, no verification, no recourse. escrowBUILD replaces trust with TON-based smart contract escrow, automated post verification, and a privacy-preserving fund relay.
 
 ## Architecture
 
-Single Node.js monolith running Fastify (REST API), grammY (Telegram bot), and BullMQ workers — all in one process. The frontend is a React SPA served as static files in production.
+```
+Telegram Bot (grammY)          Mini App (React + Vite)
+        |                              |
+        v                              v
+   Fastify API (REST + Zod validation)
+        |
+   +----+----+----+----+
+   |    |    |    |    |
+Services  Prisma  TON SDK  BullMQ Workers  Platform Adapters
+   |       |        |          |                |
+Postgres  Redis   TON RPC   Background Jobs   Telegram / YouTube / ...
+```
 
-**Core abstractions:**
+**Server** -- Fastify handles REST routes for the Mini App while grammY runs the Telegram bot. Both share the same service layer, database, and worker infrastructure. A single process boots everything.
 
-- **Platform adapter pattern** — each platform (Telegram, YouTube, Instagram, Twitter) implements `IPlatformAdapter` with `fetchChannelInfo()`, `publishPost()`, `verifyPostExists()`, etc. Deal logic is platform-agnostic. Adding a new platform means one adapter file and a registry entry.
+**Workers** -- Seven BullMQ workers drive deal progression: payment detection (30s), auto-posting (30s), post verification (10min), deal timeouts (5min), stats refresh (6h), data purge (60min), and failed transfer recovery (2min). Redis-backed with distributed locks, retries, and dead-letter queues.
 
-- **Deal state machine** — 14 states with validated transitions. Every state change is logged as a `DealEvent` with actor, timestamp, and metadata. Invalid transitions are rejected at the service layer.
+**Frontend** -- React 19 + TanStack Query + `@telegram-apps/telegram-ui`. Runs as a Telegram Mini App (WebApp SDK) with graceful fallback for browser development.
 
-- **Per-deal escrow wallets** — each deal gets its own TON WalletContractV4 with an encrypted mnemonic. Funds are isolated. Payouts use a two-hop relay (escrow -> master -> recipient) to break on-chain linkage between parties.
-
-- **6 BullMQ workers** — payment detection (30s), auto-posting (30s), post verification (10min), deal timeouts (5min), data purge (60min), and transfer recovery (2min). Each runs on its own Redis queue.
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for sequence diagrams, data model details, and scalability analysis.
+**Blockchain** -- Each deal gets a unique TON WalletContractV4 escrow wallet. Funds move through a two-hop relay (escrow -> master -> recipient) to break on-chain linkage between parties.
 
 ## Key Decisions
 
-**Why a monolith?** One process, one deploy, no inter-service latency. The service layer is cleanly separated — splitting into API/bot/workers later is a config change, not a rewrite. BullMQ already supports remote workers.
+**Why TON over other chains?**
+Native Telegram ecosystem. Users already have TON wallets via Telegram's built-in wallet. No bridge, no MetaMask, no chain switching. Plus low fees (~0.01 TON per transaction) and 5-second finality.
 
-**Why per-deal wallets?** Isolates funds per deal. A compromised wallet affects one deal, not the whole platform. Simpler accounting — one wallet, one balance, one deal.
+**Why per-deal escrow wallets?**
+Each deal gets its own wallet address. No commingling of funds, no accounting complexity, fully transparent on-chain. Anyone can verify the escrow balance for a specific deal by checking its wallet address on TonScan.
 
-**Why two-hop relay?** On-chain observers see all payouts originating from the master wallet. They can't trace which advertiser deposit funded which channel owner payout. Privacy without a mixer.
+**Why two-hop fund relay?**
+Privacy. A direct transfer from escrow to the channel owner's wallet creates a public on-chain link between advertiser and channel owner. The two-hop relay (escrow -> master wallet -> recipient) breaks this linkage. The master wallet aggregates many transfers, making individual deal parties unlinkable.
 
-**Why BullMQ?** Need reliable background jobs with retries, backoff, and job locking. BullMQ on Redis gives all of that with zero config. Workers are independent — can scale horizontally by running more instances.
+**Why AES-256-GCM for creative content?**
+Ad creatives and escrow mnemonics contain sensitive business data. At-rest encryption means a database breach doesn't expose content. GCM mode provides both confidentiality and integrity verification. The purge worker destroys encrypted content after 30 days (GDPR-aware retention).
 
-**Why platform adapter pattern?** The marketplace vision is cross-platform. All deal/escrow/payment logic is identical regardless of where the ad runs. The adapter handles platform-specific API calls (posting, verifying, fetching channel info). New platforms are additive, not invasive.
+**Why the platform adapter pattern?**
+The deal/escrow/payment logic is identical regardless of where the ad runs. The `IPlatformAdapter` interface (`fetchChannelInfo`, `publishPost`, `verifyPostExists`, etc.) abstracts platform differences. Adding Instagram or Twitter means implementing 6 methods -- zero changes to the deal state machine, escrow flow, or payment logic.
+
+**Why BullMQ over cron?**
+Cron jobs are fire-and-forget with no retry, no backpressure, and no visibility. BullMQ provides: distributed locks (prevents duplicate processing across instances), configurable retries with exponential backoff, dead-letter queues for failed jobs, Redis-backed persistence (survives restarts), and per-job metadata for debugging.
+
+**Why grammY over node-telegram-bot-api?**
+TypeScript-first with full type inference on context objects. Middleware ecosystem (conversations plugin for multi-step flows, auto-retry, flood control). Built-in session management. The conversations plugin handles the `/addchannel` and `/createcampaign` multi-step flows cleanly without hand-rolled state machines.
 
 ## Future Thoughts
 
-- **Webhook mode for bot** — switch from long polling to `bot.api.setWebhook()`. grammY supports both; one config change.
-- **Process splitting** — separate deploys for API server, bot, and workers. BullMQ already supports this architecture.
-- **Multi-chain support** — the wallet/transfer layer is abstracted. Could add Ethereum, Solana, or other chains behind the same interface.
-- **Instagram & Twitter** — adapters are stubbed. Need API access and auth flows to implement `publishPost()` and `verifyPostExists()`.
-- **Admin dashboard** — DealEvent audit trail is already logged. Needs a UI for dispute resolution, user management, and platform stats.
-- **Dispute arbitration** — currently disputes are flagged but resolved manually. Could add voting, evidence submission, or automated rules.
-- **Reputation system** — deal completion history is tracked. Could surface completion rates, average response times, and reviews.
-- **Media uploads** — currently creative media uses external URLs. Could add S3/R2 storage for direct uploads.
+- **TON mainnet deployment** -- Real USDT escrow with production wallet management and key rotation
+- **Dispute arbitration** -- Community DAO or TON governance for resolving disputed deals, replacing manual admin resolution
+- **Reputation scoring** -- On-chain reputation based on deal completion history, cancel rate, and verification pass rate
+- **Multi-chain support** -- Ethereum L2 escrow (Base, Arbitrum) for non-Telegram platforms where TON isn't the native ecosystem
+- **Real-time WebSocket updates** -- Push deal status changes to the Mini App instead of polling
+- **Advertiser analytics dashboard** -- Impressions, clicks, and ROI tracking per deal with platform-specific metrics
+- **Fiat on-ramp** -- TON Connect payment channels or third-party fiat-to-TON conversion so users don't need to pre-hold TON
 
 ## Known Limitations
 
-- **Polling-based payment detection** — escrow wallets are checked every 30s via TonCenter RPC. Not webhook-driven. Works fine under ~1000 concurrent deals, but adds latency to payment confirmation.
-- **No media upload** — creative content references external URLs only. No file upload to the platform.
-- **No admin panel** — disputes, user management, and platform configuration require direct database access.
-- **Manual YouTube posting** — the YouTube adapter can verify posts exist via the Data API, but can't auto-upload videos. Channel owners upload manually and submit the URL.
-- **Instagram & Twitter are stubs** — adapters exist but throw "not implemented" on posting/verification. Channel registration and deal creation work.
-- **Single-process deployment** — API, bot, and all workers run in one Node.js process. Fine for a contest demo, needs splitting for production traffic.
-- **No rate limiting on mutations** — the global rate limiter covers all endpoints equally. Write-heavy endpoints (deal creation, creative submission) could use tighter per-endpoint limits.
-- **No webhook mode for bot** — uses long polling, which is simpler but less efficient than webhooks for production.
+- **Testnet only** -- No real funds flow. All TON transactions happen on testnet. Mainnet deployment requires audited key management and regulatory review.
+- **YouTube is proof-of-concept** -- Manual posting only (owner uploads video, submits URL). Basic verification checks that the video exists but doesn't validate content match.
+- **Instagram/Twitter/TikTok adapters are stubs** -- Interface implemented, methods throw "not yet supported". Ready for integration when platform APIs are available.
+- **`getChatStatistics` requires 50+ members** -- Telegram's API restriction. Channels under 50 members show estimated stats only.
+- **Render free tier sleeps after 15min** -- Mitigated with UptimeRobot pinging `/api/health` every 5 minutes. Not an issue in production on a paid tier.
+- **No fiat on-ramp** -- Users must already hold TON in a wallet. Fiat conversion is out of scope for the current build.
+- **Bot polling mode only** -- Webhook mode requires a public HTTPS endpoint with a valid certificate. Polling works everywhere but adds ~1s latency to bot responses.
 
-## AI Disclosure
+## AI Code Percentage
 
-Approximately 70% of the code was written by AI (Claude), with human direction throughout.
+**~85% AI-generated code.**
 
-**What was human-directed:**
-- Architecture decisions (monolith vs microservices, per-deal wallets, two-hop relay, platform adapter pattern)
-- Data model design (Prisma schema, state machine states and transitions)
-- Security model (identity masking approach, encryption strategy, fund privacy design)
-- Feature prioritization and scope (what to build, what to stub)
-- Code review and iteration (catching edge cases, fixing logic errors, improving naming)
-- All deployment and infrastructure decisions
+~17,800 lines across the codebase: server source (6,080 lines), server tests (7,642 lines), and web frontend (4,137 lines).
 
-**What was AI-generated:**
-- Implementation of services, routes, workers, and bot commands
-- Prisma schema and migrations
-- React frontend pages and components
-- Test suite (647+ tests)
-- Zod validation schemas
-- TON wallet integration code
-- Platform adapter implementations
-- Documentation (README, ARCHITECTURE.md)
+**AI generated:** scaffolding, service implementations, workers, test suites, frontend pages, Prisma schema, Docker configuration, deployment setup.
 
-The human served as architect and reviewer; the AI served as implementer. Every piece of generated code was reviewed and iterated on before acceptance.
+**Human directed:** architecture decisions, feature requirements, state machine design, security model, review and iteration on every generated output, bug fixes from manual testing, deployment configuration and troubleshooting.

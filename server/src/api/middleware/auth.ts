@@ -21,63 +21,120 @@ declare module 'fastify' {
   }
 }
 
+function setUser(request: FastifyRequest, user: AuthUser) {
+  request.telegramUser = user;
+  request.user = user;
+}
+
 /**
- * Fastify preHandler that validates Telegram Mini App initData.
- * Extracts the user from initData and upserts them in the database.
- * Attaches the user to request.telegramUser.
+ * Try dev bypass — returns true if handled.
+ * In dev mode, parses the real Telegram user from initData (unverified)
+ * or falls back to a hardcoded dev user ID.
  */
-export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-  // Dev bypass: requires BOTH development mode AND an explicit secret.
-  // The secret prevents accidental exploitation if NODE_ENV is misconfigured.
-  if (config.NODE_ENV === 'development' && config.DEV_BYPASS_SECRET) {
-    const devSecret = request.headers['x-dev-secret'] as string;
-    const devUserId = request.headers['x-dev-user-id'] as string;
-    if (devSecret && devUserId && devSecret === config.DEV_BYPASS_SECRET) {
-      const user = await prisma.user.findUnique({
-        where: { telegramId: BigInt(devUserId) },
-      });
-      if (user) {
-        request.telegramUser = {
-          id: user.id,
-          telegramId: user.telegramId,
-          username: user.username || undefined,
-          firstName: user.firstName || undefined,
-        };
-        request.user = request.telegramUser;
-        return;
+async function tryDevBypass(request: FastifyRequest): Promise<boolean> {
+  if (config.NODE_ENV !== 'development' || !config.DEV_BYPASS_SECRET) return false;
+
+  const devSecret = request.headers['x-dev-secret'] as string;
+  if (!devSecret || devSecret !== config.DEV_BYPASS_SECRET) return false;
+
+  // Try to extract real Telegram user from initData (skip signature check)
+  const initDataRaw = request.headers['x-telegram-init-data'] as string;
+  if (initDataRaw) {
+    try {
+      const params = new URLSearchParams(initDataRaw);
+      const userData = params.get('user');
+      if (userData) {
+        const tgUser = JSON.parse(userData);
+        if (tgUser.id) {
+          const user = await prisma.user.upsert({
+            where: { telegramId: BigInt(tgUser.id) },
+            update: {
+              username: tgUser.username || undefined,
+              firstName: tgUser.first_name,
+            },
+            create: {
+              telegramId: BigInt(tgUser.id),
+              username: tgUser.username || undefined,
+              firstName: tgUser.first_name,
+            },
+          });
+          setUser(request, {
+            id: user.id,
+            telegramId: user.telegramId,
+            username: user.username || undefined,
+            firstName: user.firstName || undefined,
+          });
+          return true;
+        }
       }
+    } catch {
+      // Fall through to hardcoded dev user
     }
   }
 
+  // Fallback: use hardcoded dev user ID
+  const devUserId = request.headers['x-dev-user-id'] as string;
+  if (devUserId) {
+    const user = await prisma.user.upsert({
+      where: { telegramId: BigInt(devUserId) },
+      update: {},
+      create: {
+        telegramId: BigInt(devUserId),
+        firstName: 'Dev User',
+      },
+    });
+    setUser(request, {
+      id: user.id,
+      telegramId: user.telegramId,
+      username: user.username || undefined,
+      firstName: user.firstName || undefined,
+    });
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Fastify preHandler that validates Telegram Mini App initData.
+ * In development: tries real validation first, falls back to dev bypass.
+ * In production: requires valid initData signature.
+ */
+export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
   const initDataRaw = request.headers['x-telegram-init-data'] as string;
+
+  // Try real Telegram validation first
+  if (initDataRaw) {
+    const initData = validateInitData(initDataRaw);
+    if (initData) {
+      const user = await prisma.user.upsert({
+        where: { telegramId: BigInt(initData.user.id) },
+        update: {
+          username: initData.user.username || undefined,
+          firstName: initData.user.first_name,
+        },
+        create: {
+          telegramId: BigInt(initData.user.id),
+          username: initData.user.username || undefined,
+          firstName: initData.user.first_name,
+        },
+      });
+      setUser(request, {
+        id: user.id,
+        telegramId: user.telegramId,
+        username: user.username || undefined,
+        firstName: user.firstName || undefined,
+      });
+      return;
+    }
+  }
+
+  // Real validation failed or no initData — try dev bypass
+  if (await tryDevBypass(request)) return;
+
+  // Nothing worked
   if (!initDataRaw) {
     throw new UnauthorizedError('Missing Telegram initData');
   }
-
-  const initData = validateInitData(initDataRaw);
-  if (!initData) {
-    throw new UnauthorizedError('Invalid Telegram initData');
-  }
-
-  // Upsert the user — create if first visit, update name/username if changed
-  const user = await prisma.user.upsert({
-    where: { telegramId: BigInt(initData.user.id) },
-    update: {
-      username: initData.user.username || undefined,
-      firstName: initData.user.first_name,
-    },
-    create: {
-      telegramId: BigInt(initData.user.id),
-      username: initData.user.username || undefined,
-      firstName: initData.user.first_name,
-    },
-  });
-
-  request.telegramUser = {
-    id: user.id,
-    telegramId: user.telegramId,
-    username: user.username || undefined,
-    firstName: user.firstName || undefined,
-  };
-  request.user = request.telegramUser;
+  throw new UnauthorizedError('Invalid Telegram initData');
 }

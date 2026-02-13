@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { transitionDeal } from './deal.service.js';
 import { encryptField, decryptField } from '../utils/privacy.js';
+import { verifyChannelAdmin } from '../utils/adminGuard.js';
 
 const prisma = new PrismaClient();
 
@@ -28,6 +29,9 @@ export async function submitCreative(
   });
   if (!deal) throw new NotFoundError('Deal');
   if (deal.channel.ownerId !== userId) throw new ForbiddenError('Only channel owner can submit creatives');
+
+  // Re-verify admin status before proceeding
+  await verifyChannelAdmin(deal.channelId, userId);
 
   if (!['CREATIVE_PENDING', 'CREATIVE_REVISION'].includes(deal.status)) {
     throw new AppError('Cannot submit creative in current deal status');

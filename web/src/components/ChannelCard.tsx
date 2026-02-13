@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cell, Avatar, Text, Chip } from '@telegram-apps/telegram-ui';
+import { Cell, Avatar, Chip } from '@telegram-apps/telegram-ui';
 import { PlatformIcon } from './Icons.js';
 
 interface Props {
@@ -13,7 +13,8 @@ interface Props {
     language?: string;
     category?: string;
     platform?: string;
-    adFormats: { label: string; priceTon: number }[];
+    isVerified?: boolean;
+    adFormats: { label: string; priceTon: number; formatType?: string }[];
   };
 }
 
@@ -24,10 +25,9 @@ export function ChannelCard({ channel }: Props) {
     : null;
 
   const platform = channel.platform || 'TELEGRAM';
-  const descParts = [];
-  if (platform !== 'TELEGRAM') descParts.push(platform.charAt(0) + platform.slice(1).toLowerCase());
-  if (channel.language) descParts.push(channel.language.toUpperCase());
-  if (channel.category) descParts.push(channel.category);
+
+  const formatLabels = channel.adFormats.slice(0, 3).map((f) => f.label);
+  const extraCount = channel.adFormats.length - 3;
 
   return (
     <Cell
@@ -42,11 +42,35 @@ export function ChannelCard({ channel }: Props) {
           )}
         </div>
       }
-      subtitle={`${channel.subscribers.toLocaleString()} subs \u00B7 ${channel.avgViews.toLocaleString()} avg views`}
-      after={minPrice !== null ? <Chip mode="mono">{minPrice} TON</Chip> : undefined}
-      description={descParts.join(' \u00B7 ') || undefined}
+      subtitle={
+        <span>
+          {channel.subscribers.toLocaleString()} subs {'\u00B7'} {channel.avgViews.toLocaleString()} avg views
+          {formatLabels.length > 0 && (
+            <>
+              <br />
+              <span style={{ color: 'var(--tgui--hint_color)', fontSize: '12px' }}>
+                {formatLabels.join(', ')}{extraCount > 0 ? ` +${extraCount}` : ''}
+              </span>
+            </>
+          )}
+        </span>
+      }
+      after={minPrice !== null ? (
+        <div style={{ textAlign: 'right' }}>
+          <Chip mode="mono">{minPrice} TON</Chip>
+        </div>
+      ) : (
+        <span style={{ fontSize: '11px', color: 'var(--tgui--hint_color)' }}>No pricing</span>
+      )}
     >
-      {channel.title}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {channel.title}
+        {channel.isVerified && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--tgui--link_color)" style={{ flexShrink: 0 }}>
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+          </svg>
+        )}
+      </span>
     </Cell>
   );
 }

@@ -15,27 +15,31 @@ const STATUS_MESSAGES: Partial<Record<DealStatus, { message: string; target: Not
     target: 'advertiser',
   },
   CREATIVE_APPROVED: {
-    message: 'Creative approved! You can now schedule the post.',
+    message: 'Creative approved! The channel owner can now submit their post proof URL.',
     target: 'both',
   },
   CREATIVE_REVISION: {
     message: 'Revision requested on your creative. Check the notes and resubmit.',
     target: 'owner',
   },
-  SCHEDULED: {
-    message: 'Post has been scheduled. It will be auto-posted at the specified time.',
+  POSTED: {
+    message: 'Post proof submitted and verified. The post is live.',
     target: 'both',
   },
-  POSTED: {
-    message: 'Ad has been posted to the channel! Verification period begins now (24h).',
+  TRACKING: {
+    message: 'Post confirmed! Metrics tracking started. Requirements will be checked periodically.',
     target: 'both',
   },
   VERIFIED: {
-    message: 'Post verified! Funds will be released to the channel owner.',
+    message: 'All requirements met! Funds will be released to the channel owner.',
     target: 'both',
   },
   COMPLETED: {
     message: 'Deal completed! Funds have been released.',
+    target: 'both',
+  },
+  FAILED: {
+    message: 'Requirements not met within the verification window. Funds will be refunded.',
     target: 'both',
   },
   CANCELLED: {
@@ -120,6 +124,28 @@ export async function notifyNewApplication(
     await bot.api.sendMessage(Number(campaign.advertiser.telegramId), text);
   } catch (error) {
     console.error(`Failed to notify advertiser:`, error);
+  }
+}
+
+/**
+ * Notifies the advertiser when a tracked post has been edited.
+ */
+export async function notifyPostEdited(bot: Bot, dealId: number) {
+  const deal = await prisma.deal.findUnique({
+    where: { id: dealId },
+    include: {
+      channel: { include: { owner: true } },
+      advertiser: true,
+    },
+  });
+  if (!deal) return;
+
+  const text = `Deal #${deal.id}\n\nThe posted ad in "${deal.channel.title}" was edited after publishing. The content may no longer match the approved creative.`;
+
+  try {
+    await bot.api.sendMessage(Number(deal.advertiser.telegramId), text);
+  } catch (error) {
+    console.error(`Failed to notify advertiser about post edit:`, error);
   }
 }
 

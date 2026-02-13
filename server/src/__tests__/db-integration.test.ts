@@ -382,30 +382,31 @@ describe('Database Integration Tests', () => {
       expect(deal!.status).toBe('CREATIVE_APPROVED');
     });
 
-    it('schedules the post', async () => {
-      const scheduledAt = new Date(Date.now() + 60 * 60 * 1000);
-      await prisma.deal.update({
-        where: { id: dealId },
-        data: {
-          status: 'SCHEDULED',
-          scheduledPostAt: scheduledAt,
-        },
-      });
-      const deal = await prisma.deal.findUnique({ where: { id: dealId } });
-      expect(deal!.status).toBe('SCHEDULED');
-      expect(deal!.scheduledPostAt).not.toBeNull();
-    });
-
-    it('marks as posted', async () => {
+    it('marks as posted with proof', async () => {
       await prisma.deal.update({
         where: { id: dealId },
         data: {
           status: 'POSTED',
-          postedMessageId: '12345',
+          postProofUrl: 'https://t.me/channel/123',
+          platformPostId: '123',
+          trackingStartedAt: new Date(),
         },
       });
       const deal = await prisma.deal.findUnique({ where: { id: dealId } });
       expect(deal!.status).toBe('POSTED');
+      expect(deal!.postProofUrl).toBe('https://t.me/channel/123');
+    });
+
+    it('transitions to tracking', async () => {
+      await prisma.deal.update({
+        where: { id: dealId },
+        data: {
+          status: 'TRACKING',
+          postedMessageId: '12345',
+        },
+      });
+      const deal = await prisma.deal.findUnique({ where: { id: dealId } });
+      expect(deal!.status).toBe('TRACKING');
       expect(deal!.postedMessageId).toBe('12345');
     });
 

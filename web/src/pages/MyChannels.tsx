@@ -1,10 +1,11 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Section, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
+import { Section, Cell, Avatar, Chip, Button, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
 import { fetchMyChannels } from '../api/client.js';
-import { ChannelCard } from '../components/ChannelCard.js';
 
 export function MyChannels() {
+  const navigate = useNavigate();
   const { data: channels, isLoading } = useQuery({
     queryKey: ['my-channels'],
     queryFn: fetchMyChannels,
@@ -18,6 +19,11 @@ export function MyChannels() {
           {channels?.length !== undefined ? `${channels.length} registered` : 'Channels you own'}
         </Text>
       </div>
+      <div style={{ padding: '0 16px 12px' }}>
+        <Button size="m" mode="bezeled" stretched onClick={() => navigate('/register-channel')}>
+          + Register Channel
+        </Button>
+      </div>
       {isLoading && (
         <Placeholder>
           <Spinner size="m" />
@@ -25,16 +31,49 @@ export function MyChannels() {
       )}
       {channels?.length > 0 && (
         <Section>
-          {channels.map((channel: any) => (
-            <ChannelCard key={channel.id} channel={channel} />
-          ))}
+          {channels.map((channel: any) => {
+            const activeFormats = channel.adFormats?.filter((f: any) => f.isActive) || [];
+            const draftFormats = channel.adFormats?.filter((f: any) => !f.isActive) || [];
+            const hasNoPricing = activeFormats.length === 0;
+
+            return (
+              <Cell
+                key={channel.id}
+                onClick={() => navigate(`/my-channels/${channel.id}`)}
+                before={<Avatar size={48} acronym={channel.title.charAt(0)} />}
+                subtitle={
+                  <span>
+                    {channel.subscribers?.toLocaleString() || 0} subs
+                    {' \u00B7 '}
+                    {activeFormats.length} live format{activeFormats.length !== 1 ? 's' : ''}
+                    {draftFormats.length > 0 && `, ${draftFormats.length} draft`}
+                  </span>
+                }
+                after={
+                  hasNoPricing ? (
+                    <Chip mode="elevated" style={{ color: 'var(--tgui--destructive_text_color)', fontSize: '11px' }}>
+                      Set prices
+                    </Chip>
+                  ) : (
+                    <Chip mode="mono">Manage</Chip>
+                  )
+                }
+              >
+                {channel.title}
+              </Cell>
+            );
+          })}
         </Section>
       )}
       {!isLoading && channels?.length === 0 && (
         <Placeholder
           header="No channels yet"
-          description="Use the bot to register a channel with /addchannel."
-        />
+          description="Register a YouTube, Instagram, or Twitter/X channel to start monetizing."
+        >
+          <Button size="m" onClick={() => navigate('/register-channel')}>
+            Register Channel
+          </Button>
+        </Placeholder>
       )}
     </div>
   );

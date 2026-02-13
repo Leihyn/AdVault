@@ -1,4 +1,5 @@
 import { Bot, InlineKeyboard } from 'grammy';
+import { PrismaClient } from '@prisma/client';
 import { config } from '../config.js';
 import { ensureUser } from './middleware/auth.js';
 import { startCommand, handleRoleSelection } from './commands/start.js';
@@ -15,6 +16,9 @@ import {
   isInCreateCampaignFlow,
 } from './conversations/createCampaign.js';
 import { handleDealMessage } from './conversations/dealChat.js';
+import { notifyPostEdited } from '../services/notification.service.js';
+
+const prisma = new PrismaClient();
 
 export function createBot(): Bot {
   const bot = new Bot(config.BOT_TOKEN);
@@ -60,6 +64,35 @@ export function createBot(): Bot {
     // If message starts with /msg, handle as deal chat
     if (ctx.message.text.startsWith('/msg')) {
       return handleDealMessage(ctx, bot);
+    }
+  });
+
+  // Detect edited channel posts for active deals
+  bot.on('edited_channel_post', async (ctx) => {
+    try {
+      const chatId = ctx.chat.id;
+      const messageId = ctx.editedChannelPost.message_id;
+
+      // Find any active deal with this channel + message ID in TRACKING status
+      const deal = await prisma.deal.findFirst({
+        where: {
+          status: 'TRACKING',
+          postedMessageId: String(messageId),
+          channel: {
+            OR: [
+              { telegramChatId: BigInt(chatId) },
+              { platformChannelId: String(chatId) },
+            ],
+          },
+        },
+      });
+
+      if (deal) {
+        console.warn(`Deal ${deal.id}: tracked post (msg ${messageId}) was edited in chat ${chatId}`);
+        await notifyPostEdited(bot, deal.id);
+      }
+    } catch (error) {
+      console.error('Error handling edited_channel_post:', error);
     }
   });
 

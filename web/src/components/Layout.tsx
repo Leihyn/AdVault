@@ -1,14 +1,14 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Tabbar, FixedLayout } from '@telegram-apps/telegram-ui';
-import { IconHome, IconChannels, IconCampaigns, IconDeals, IconProfile } from './Icons.js';
+import { IconHome, IconBrowse, IconNew, IconActivity, IconProfile } from './Icons.js';
 import { useBackButton } from '../hooks/useBackButton.js';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home', Icon: IconHome },
-  { path: '/channels', label: 'Channels', Icon: IconChannels },
-  { path: '/campaigns', label: 'Campaigns', Icon: IconCampaigns },
-  { path: '/deals', label: 'Deals', Icon: IconDeals },
+  { path: '/channels', label: 'Browse', Icon: IconBrowse },
+  { path: '/new', label: 'New', Icon: IconNew },
+  { path: '/activity', label: 'Activity', Icon: IconActivity },
   { path: '/profile', label: 'Profile', Icon: IconProfile },
 ];
 

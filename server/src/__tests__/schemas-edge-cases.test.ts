@@ -10,7 +10,7 @@ import {
   campaignFiltersSchema,
   applyToCampaignSchema,
   createDealSchema,
-  scheduleDealSchema,
+  submitPostProofSchema,
   disputeDealSchema,
   submitCreativeSchema,
   revisionSchema,
@@ -327,71 +327,46 @@ describe('Zod Schemas — Edge Cases', () => {
     });
   });
 
-  // ==================== Datetime validation ====================
-  describe('datetime validation in scheduleDealSchema', () => {
-    it('rejects ISO 8601 with timezone offset (z.string().datetime() requires Z)', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2025-06-15T14:00:00+05:30',
-      });
-      // z.string().datetime() only accepts UTC (Z suffix) by default
-      // To accept offsets, must use z.string().datetime({ offset: true })
-      expect(result.success).toBe(false);
-    });
-
-    it('accepts ISO 8601 with Z timezone', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2025-06-15T14:00:00Z',
+  // ==================== Post Proof URL validation ====================
+  describe('URL validation in submitPostProofSchema', () => {
+    it('accepts valid HTTPS URL', () => {
+      const result = submitPostProofSchema.safeParse({
+        postUrl: 'https://t.me/mychannel/123',
       });
       expect(result.success).toBe(true);
     });
 
-    it('rejects date without time', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2025-06-15',
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it('rejects time without date', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '14:00:00Z',
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it('rejects invalid month (13)', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2025-13-15T14:00:00Z',
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it('rejects invalid day (32)', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2025-01-32T14:00:00Z',
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it('accepts leap year date', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2024-02-29T00:00:00Z',
+    it('accepts valid YouTube URL', () => {
+      const result = submitPostProofSchema.safeParse({
+        postUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       });
       expect(result.success).toBe(true);
     });
 
-    it('accepts past datetime (no future validation in schema)', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2020-01-01T00:00:00Z',
+    it('rejects empty string', () => {
+      const result = submitPostProofSchema.safeParse({
+        postUrl: '',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-URL string', () => {
+      const result = submitPostProofSchema.safeParse({
+        postUrl: 'not-a-url',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts HTTP URL', () => {
+      const result = submitPostProofSchema.safeParse({
+        postUrl: 'http://example.com/post/123',
       });
       expect(result.success).toBe(true);
     });
 
-    it('accepts far future datetime', () => {
-      const result = scheduleDealSchema.safeParse({
-        scheduledPostAt: '2099-12-31T23:59:59Z',
-      });
-      expect(result.success).toBe(true);
+    it('rejects missing postUrl field', () => {
+      const result = submitPostProofSchema.safeParse({});
+      expect(result.success).toBe(false);
     });
   });
 

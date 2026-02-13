@@ -273,8 +273,8 @@ describe('Full Deal + Escrow Flow', () => {
 
     await transitionDeal(dealId, 'CREATIVE_SUBMITTED');
     await transitionDeal(dealId, 'CREATIVE_APPROVED');
-    await transitionDeal(dealId, 'SCHEDULED');
     await transitionDeal(dealId, 'POSTED');
+    await transitionDeal(dealId, 'TRACKING');
     await transitionDeal(dealId, 'VERIFIED');
 
     deal = await prisma.deal.findUnique({ where: { id: dealId } });

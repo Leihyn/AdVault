@@ -4,6 +4,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { transitionDeal } from './deal.service.js';
 import { config } from '../config.js';
 import { toNanotons, subtractFee, decimalToString } from '../utils/decimal.js';
+import { verifyChannelAdmin } from '../utils/adminGuard.js';
 
 const prisma = new PrismaClient();
 
@@ -39,7 +40,10 @@ export async function checkEscrowFunding(dealId: number): Promise<boolean> {
   const balance = await getEscrowBalance(deal.escrowAddress);
   const requiredNano = toNanotons(deal.amountTon as unknown as Decimal);
 
-  if (balance >= requiredNano) {
+  // Allow 5% tolerance for network fees (TON deducts gas from transfers to uninitialized wallets)
+  const minAcceptable = requiredNano * 95n / 100n;
+
+  if (balance >= minAcceptable) {
     await transitionDeal(dealId, 'FUNDED');
     await transitionDeal(dealId, 'CREATIVE_PENDING');
 
@@ -76,6 +80,9 @@ export async function releaseFunds(dealId: number) {
     include: { channel: { include: { owner: true } } },
   });
   if (!deal || !deal.escrowMnemonicEncrypted) throw new Error('Deal not found or no escrow');
+
+  // Re-verify admin status before releasing funds
+  await verifyChannelAdmin(deal.channelId, deal.channel.ownerId);
 
   const ownerWallet = deal.channel.owner.tonWalletAddress;
   if (!ownerWallet) throw new Error('Channel owner has no wallet address');

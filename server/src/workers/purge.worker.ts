@@ -5,7 +5,7 @@ import { hashDealData } from '../utils/privacy.js';
 
 const prisma = new PrismaClient();
 
-const TERMINAL_STATUSES = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'TIMED_OUT'];
+const TERMINAL_STATUSES = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'FAILED', 'TIMED_OUT'];
 
 /**
  * Purges completed deal data after the configured retention period.
@@ -86,6 +86,8 @@ export async function processPurge(_job: Job) {
         }),
         // Delete event trail
         prisma.dealEvent.deleteMany({ where: { dealId: deal.id } }),
+        // Delete deal requirements
+        prisma.dealRequirement.deleteMany({ where: { dealId: deal.id } }),
         // Wipe transaction addresses
         prisma.transaction.updateMany({
           where: { dealId: deal.id },

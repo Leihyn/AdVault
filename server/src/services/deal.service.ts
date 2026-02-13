@@ -1,6 +1,6 @@
 import { PrismaClient, DealStatus, Prisma } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
-import { generateAlias } from '../utils/privacy.js';
+import { generateAlias, decryptField } from '../utils/privacy.js';
 import { toDecimal } from '../utils/decimal.js';
 
 const prisma = new PrismaClient();
@@ -12,11 +12,12 @@ const VALID_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   CREATIVE_PENDING: ['CREATIVE_SUBMITTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
   CREATIVE_SUBMITTED: ['CREATIVE_APPROVED', 'CREATIVE_REVISION', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
   CREATIVE_REVISION: ['CREATIVE_SUBMITTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
-  CREATIVE_APPROVED: ['SCHEDULED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
-  SCHEDULED: ['POSTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
-  POSTED: ['VERIFIED', 'DISPUTED', 'TIMED_OUT'],
+  CREATIVE_APPROVED: ['POSTED', 'CANCELLED', 'REFUNDED', 'DISPUTED', 'TIMED_OUT'],
+  POSTED: ['TRACKING', 'DISPUTED', 'TIMED_OUT'],
+  TRACKING: ['VERIFIED', 'FAILED', 'DISPUTED', 'TIMED_OUT'],
   VERIFIED: ['COMPLETED'],
   COMPLETED: [],
+  FAILED: ['REFUNDED', 'DISPUTED'],
   CANCELLED: [],
   REFUNDED: [],
   DISPUTED: ['REFUNDED', 'COMPLETED'],
@@ -30,6 +31,7 @@ const STATUS_TIMEOUTS: Partial<Record<DealStatus, number>> = {
   CREATIVE_PENDING: 72,
   CREATIVE_SUBMITTED: 96,
   CREATIVE_REVISION: 72,
+  CREATIVE_APPROVED: 168,
 };
 
 export async function createDeal(data: {
@@ -40,24 +42,47 @@ export async function createDeal(data: {
   amountTon: number;
   escrowAddress?: string;
   escrowMnemonicEncrypted?: string;
+  verificationWindowHours?: number;
+  requirements?: Array<{ metricType: string; targetValue: number }>;
+  brief?: string;
+  assets?: Array<{ label: string; value: string }>;
 }) {
   const timeoutAt = new Date();
   timeoutAt.setHours(timeoutAt.getHours() + (STATUS_TIMEOUTS.PENDING_PAYMENT || 24));
 
-  const deal = await prisma.deal.create({
-    data: {
-      channelId: data.channelId,
-      advertiserId: data.advertiserId,
-      adFormatId: data.adFormatId,
-      campaignId: data.campaignId,
-      amountTon: toDecimal(data.amountTon),
-      escrowAddress: data.escrowAddress,
-      escrowMnemonicEncrypted: data.escrowMnemonicEncrypted,
-      ownerAlias: generateAlias('Seller'),
-      advertiserAlias: generateAlias('Buyer'),
-      status: 'PENDING_PAYMENT',
-      timeoutAt,
-    },
+  const requirements = data.requirements?.length
+    ? data.requirements
+    : [{ metricType: 'POST_EXISTS', targetValue: 1 }];
+
+  const deal = await prisma.$transaction(async (tx) => {
+    const newDeal = await tx.deal.create({
+      data: {
+        channelId: data.channelId,
+        advertiserId: data.advertiserId,
+        adFormatId: data.adFormatId,
+        campaignId: data.campaignId,
+        amountTon: toDecimal(data.amountTon),
+        escrowAddress: data.escrowAddress,
+        escrowMnemonicEncrypted: data.escrowMnemonicEncrypted,
+        ownerAlias: generateAlias('Seller'),
+        advertiserAlias: generateAlias('Buyer'),
+        verificationWindowHours: data.verificationWindowHours ?? 24,
+        brief: data.brief || null,
+        assets: data.assets?.length ? data.assets : undefined,
+        status: 'PENDING_PAYMENT',
+        timeoutAt,
+      },
+    });
+
+    await tx.dealRequirement.createMany({
+      data: requirements.map((req) => ({
+        dealId: newDeal.id,
+        metricType: req.metricType as any,
+        targetValue: req.targetValue,
+      })),
+    });
+
+    return newDeal;
   });
 
   await createDealEvent(deal.id, 'DEAL_CREATED', null, 'PENDING_PAYMENT', data.advertiserId);
@@ -73,6 +98,7 @@ export async function getDeal(id: number, requestingUserId?: number) {
       adFormat: true,
       campaign: { select: { id: true, title: true } },
       creatives: { orderBy: { version: 'desc' } },
+      requirements: { orderBy: { id: 'asc' } },
       transactions: { orderBy: { createdAt: 'desc' } },
       events: { orderBy: { createdAt: 'desc' }, take: 20 },
     },
@@ -87,6 +113,10 @@ export async function getDeal(id: number, requestingUserId?: number) {
     if (!isAdvertiser && !isOwner) {
       throw new ForbiddenError('Not a party to this deal');
     }
+
+    // Tell the frontend what role this user has on this deal
+    (deal as any).isAdvertiser = isAdvertiser;
+    (deal as any).isOwner = isOwner;
 
     if (isAdvertiser && !isOwner) {
       // Advertiser sees owner as alias, strip owner's real identity
@@ -107,6 +137,22 @@ export async function getDeal(id: number, requestingUserId?: number) {
       };
       (deal as any).ownerLabel = 'You';
       (deal as any).advertiserLabel = deal.advertiserAlias;
+    } else if (isOwner && isAdvertiser) {
+      // Same person is both parties (testing / self-deal)
+      (deal as any).ownerLabel = 'You';
+      (deal as any).advertiserLabel = 'You';
+    }
+  }
+
+  // Decrypt creative content before returning
+  if (deal.creatives) {
+    for (const creative of deal.creatives) {
+      if (creative.contentText) {
+        try { (creative as any).contentText = decryptField(creative.contentText); } catch {}
+      }
+      if (creative.mediaUrl) {
+        try { (creative as any).mediaUrl = decryptField(creative.mediaUrl); } catch {}
+      }
     }
   }
 
@@ -168,7 +214,7 @@ export async function transitionDeal(
       : null;
 
     // Track when deal reaches a terminal state (for auto-purge scheduling)
-    const terminalStatuses: DealStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'TIMED_OUT'];
+    const terminalStatuses: DealStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED', 'FAILED', 'TIMED_OUT'];
     const completedAt = terminalStatuses.includes(newStatus) ? new Date() : undefined;
 
     const updated = await tx.deal.update({
@@ -230,29 +276,16 @@ export async function disputeDeal(dealId: number, userId: number, reason: string
   });
 }
 
-export async function setScheduledPostTime(dealId: number, userId: number, scheduledAt: Date) {
-  const deal = await prisma.deal.findUnique({
-    where: { id: dealId },
-    include: { channel: true },
-  });
+export async function setScheduledPostTime(dealId: number, scheduledPostAt: Date) {
+  const deal = await prisma.deal.findUnique({ where: { id: dealId } });
   if (!deal) throw new NotFoundError('Deal');
-
-  // Either party can set the schedule
-  const isAdvertiser = deal.advertiserId === userId;
-  const isOwner = deal.channel.ownerId === userId;
-  if (!isAdvertiser && !isOwner) throw new ForbiddenError('Not a party to this deal');
-
   if (deal.status !== 'CREATIVE_APPROVED') {
-    throw new AppError('Creative must be approved before scheduling');
+    throw new AppError('Can only schedule a post when deal is in CREATIVE_APPROVED status');
   }
 
-  await prisma.deal.update({
+  return prisma.deal.update({
     where: { id: dealId },
-    data: { scheduledPostAt: scheduledAt },
-  });
-
-  return transitionDeal(dealId, 'SCHEDULED', userId, {
-    scheduledAt: scheduledAt.toISOString(),
+    data: { scheduledPostAt },
   });
 }
 
@@ -270,31 +303,15 @@ export async function getTimedOutDeals() {
   });
 }
 
-export async function getScheduledDeals() {
+export async function getTrackingDeals() {
   return prisma.deal.findMany({
     where: {
-      status: 'SCHEDULED',
-      scheduledPostAt: { lte: new Date() },
+      status: 'TRACKING',
+      platformPostId: { not: null },
     },
     include: {
       channel: true,
-      creatives: {
-        where: { status: 'APPROVED' },
-        orderBy: { version: 'desc' },
-        take: 1,
-      },
-    },
-  });
-}
-
-export async function getPostedDeals() {
-  return prisma.deal.findMany({
-    where: {
-      status: 'POSTED',
-      postedMessageId: { not: null },
-    },
-    include: {
-      channel: true,
+      requirements: true,
     },
   });
 }

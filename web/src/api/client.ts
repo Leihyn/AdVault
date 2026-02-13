@@ -31,14 +31,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
 
   const initData = getInitData();
+
   if (initData) {
     headers['x-telegram-init-data'] = initData;
   }
 
-  // DEV ONLY: bypass Telegram auth for local testing
-  if (!initData && import.meta.env.DEV) {
+  // In dev mode, always send bypass headers as fallback
+  if (import.meta.env.DEV) {
     headers['x-dev-secret'] = 'devsecret123';
-    headers['x-dev-user-id'] = '1';
+    headers['x-dev-user-id'] = '6438629889';
   }
 
   const isIdempotent = !options.method || options.method === 'GET';
@@ -98,8 +99,60 @@ export function fetchChannel(id: number) {
   return request<any>(`/channels/${id}`);
 }
 
+export function createChannel(data: {
+  platform: string;
+  platformChannelId?: string;
+  title: string;
+  description?: string;
+  username?: string;
+  language?: string;
+  category?: string;
+}) {
+  return request<any>('/channels', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateChannel(id: number, data: { title?: string; description?: string; language?: string; category?: string }) {
+  return request<any>(`/channels/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
 export function fetchChannelStats(id: number) {
   return request<any>(`/channels/${id}/stats`);
+}
+
+export function refreshChannelStats(id: number) {
+  return request<any>(`/channels/${id}/refresh-stats`, { method: 'POST', body: '{}' });
+}
+
+export function syncChannelAdmins(id: number) {
+  return request<any>(`/channels/${id}/admins/sync`, { method: 'POST', body: '{}' });
+}
+
+export function schedulePost(dealId: number, scheduledPostAt: string) {
+  return request<any>(`/deals/${dealId}/schedule-post`, {
+    method: 'POST',
+    body: JSON.stringify({ scheduledPostAt }),
+  });
+}
+
+export function addAdFormat(channelId: number, data: { formatType: string; label: string; description?: string; priceTon: number }) {
+  return request<any>(`/channels/${channelId}/formats`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateAdFormat(channelId: number, formatId: number, data: { label?: string; description?: string; priceTon?: number; isActive?: boolean }) {
+  return request<any>(`/channels/${channelId}/formats/${formatId}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export function deleteAdFormat(channelId: number, formatId: number) {
+  return request<any>(`/channels/${channelId}/formats/${formatId}`, { method: 'DELETE' });
+}
+
+// --- Verification ---
+export function generateVerificationToken(channelId: number) {
+  return request<any>(`/channels/${channelId}/verify/token`, { method: 'POST', body: '{}' });
+}
+
+export function checkVerification(channelId: number) {
+  return request<any>(`/channels/${channelId}/verify/check`, { method: 'POST', body: '{}' });
 }
 
 // --- Campaigns ---
@@ -135,11 +188,11 @@ export function createDeal(data: any) {
 }
 
 export function payDeal(id: number) {
-  return request<any>(`/deals/${id}/pay`, { method: 'POST' });
+  return request<any>(`/deals/${id}/pay`, { method: 'POST', body: '{}' });
 }
 
 export function cancelDeal(id: number) {
-  return request<any>(`/deals/${id}/cancel`, { method: 'POST' });
+  return request<any>(`/deals/${id}/cancel`, { method: 'POST', body: '{}' });
 }
 
 export function disputeDeal(id: number, reason: string) {
@@ -152,15 +205,48 @@ export function submitCreative(dealId: number, data: any) {
 }
 
 export function approveCreative(dealId: number) {
-  return request<any>(`/deals/${dealId}/creative/approve`, { method: 'POST' });
+  return request<any>(`/deals/${dealId}/creative/approve`, { method: 'POST', body: '{}' });
 }
 
 export function requestRevision(dealId: number, notes: string) {
   return request<any>(`/deals/${dealId}/creative/revision`, { method: 'POST', body: JSON.stringify({ notes }) });
 }
 
-export function schedulePost(dealId: number, scheduledPostAt: string) {
-  return request<any>(`/deals/${dealId}/creative/schedule`, { method: 'POST', body: JSON.stringify({ scheduledPostAt }) });
+export function submitPostProof(dealId: number, postUrl: string) {
+  return request<any>(`/deals/${dealId}/post-proof`, { method: 'POST', body: JSON.stringify({ postUrl }) });
+}
+
+export function waiveRequirement(dealId: number, reqId: number) {
+  return request<any>(`/deals/${dealId}/requirements/${reqId}/waive`, { method: 'POST', body: '{}' });
+}
+
+export function confirmRequirement(dealId: number, reqId: number) {
+  return request<any>(`/deals/${dealId}/requirements/${reqId}/confirm`, { method: 'POST', body: '{}' });
+}
+
+// --- Disputes ---
+export function fetchDispute(dealId: number) {
+  return request<any>(`/deals/${dealId}/dispute`);
+}
+
+export function openDispute(dealId: number, reason: string) {
+  return request<any>(`/deals/${dealId}/dispute`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+export function submitDisputeEvidence(dealId: number, description: string, url?: string) {
+  return request<any>(`/deals/${dealId}/dispute/evidence`, {
+    method: 'POST', body: JSON.stringify({ description, url: url || undefined }),
+  });
+}
+
+export function proposeResolution(dealId: number, outcome: string, splitPercent?: number) {
+  return request<any>(`/deals/${dealId}/dispute/propose`, {
+    method: 'POST', body: JSON.stringify({ outcome, splitPercent }),
+  });
+}
+
+export function acceptProposal(dealId: number) {
+  return request<any>(`/deals/${dealId}/dispute/accept`, { method: 'POST', body: '{}' });
 }
 
 export function fetchCreatives(dealId: number) {

@@ -125,15 +125,15 @@ describe('API Integration - Route Registration & Error Handling', () => {
       expect([400, 401, 500]).toContain(res.statusCode);
     });
 
-    it('returns 400 for invalid schedule datetime', async () => {
+    it('returns 400 for invalid post proof URL', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/api/deals/1/creative/schedule',
+        url: '/api/deals/1/post-proof',
         headers: {
           'x-dev-user-id': '123456789',
           'content-type': 'application/json',
         },
-        payload: { scheduledPostAt: 'not-a-date' },
+        payload: { postUrl: 'not-a-url' },
       });
       expect([400, 401, 500]).toContain(res.statusCode);
     });
@@ -177,7 +177,9 @@ describe('API Integration - Route Registration & Error Handling', () => {
       { method: 'POST' as const, url: '/api/deals/1/creative' },
       { method: 'POST' as const, url: '/api/deals/1/creative/approve' },
       { method: 'POST' as const, url: '/api/deals/1/creative/revision' },
-      { method: 'POST' as const, url: '/api/deals/1/creative/schedule' },
+      { method: 'POST' as const, url: '/api/deals/1/post-proof' },
+      { method: 'POST' as const, url: '/api/deals/1/requirements/1/waive' },
+      { method: 'POST' as const, url: '/api/deals/1/requirements/1/confirm' },
       { method: 'GET' as const, url: '/api/deals/1/creatives' },
       { method: 'GET' as const, url: '/api/deals/1/receipt' },
       { method: 'POST' as const, url: '/api/campaigns' },
