@@ -1,4 +1,4 @@
-# escrowBUILD — Frontend User Flow
+# AdVault — Frontend User Flow
 
 ## Open the App
 

@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_USER: escrow
       POSTGRES_PASSWORD: escrow_dev
-      POSTGRES_DB: escrowbuild
+      POSTGRES_DB: advault
     ports:
       - "5432:5432"
     volumes:

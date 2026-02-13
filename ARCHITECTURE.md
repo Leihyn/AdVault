@@ -1,4 +1,4 @@
-# escrowBUILD — Architecture & System Design
+# AdVault — Architecture & System Design
 
 A trustless Telegram ads marketplace where advertisers fund per-deal TON escrow wallets, channel owners submit creatives for approval, and a bot auto-posts, verifies delivery after 24h, then releases funds — no middleman, no trust required.
 
@@ -100,7 +100,7 @@ A trustless Telegram ads marketplace where advertisers fund per-deal TON escrow 
 
 ```
                         ┌──────────────────────────────────┐
-                        │          escrowBUILD              │
+                        │            AdVault                │
                         │                                  │
   ┌──────────┐          │                                  │
   │ Channel  │─────────►│  Register channel                │

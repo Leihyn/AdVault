@@ -11,7 +11,7 @@ import { resolve } from 'path';
 dotenvConfig({ path: resolve(__dirname, '../../.env') });
 
 // Only set defaults if .env didn't provide them
-process.env.DATABASE_URL ??= 'postgresql://machine@localhost:5432/escrowbuild';
+process.env.DATABASE_URL ??= 'postgresql://machine@localhost:5432/advault';
 process.env.BOT_TOKEN ??= 'test-bot-token-12345';
 process.env.ESCROW_ENCRYPTION_KEY ??= 'a'.repeat(64);
 process.env.NODE_ENV ??= 'test';

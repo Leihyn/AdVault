@@ -1,4 +1,4 @@
-# escrowBUILD — Enhancements & TODOs
+# AdVault — Enhancements & TODOs
 
 Tracked issues, planned features, and UX improvements discovered during testing.
 

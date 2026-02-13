@@ -1,16 +1,16 @@
-# escrowBUILD
+# AdVault
 
 Telegram channel ads are a trust problem. Advertisers pay upfront and hope the post goes live. Channel owners deliver first and hope the payment clears. Both sides lose when the other ghosts.
 
 In traditional advertising, escrow solves this. In Telegram? Nothing exists. Advertisers in the $20B+ Telegram ad market rely on screenshots, good faith, and intermediaries who take 30% cuts.
 
-escrowBUILD fixes this with TON-based escrow. Funds lock on-chain until the ad is posted, verified, and the hold period passes. No trust required.
+AdVault fixes this with TON-based escrow. Funds lock on-chain until the ad is posted, verified, and the hold period passes. No trust required.
 
 ## Quick Start
 
 ```bash
 # 1. Start infrastructure (Postgres + Redis)
-cd escrowBUILD
+cd AdVault
 docker compose up -d
 
 # 2. Configure environment
@@ -48,15 +48,15 @@ A fully free deployment using Render (web service + Postgres) and Redis Cloud (m
 ### Step 2: Deploy to Render
 
 1. Go to [render.com](https://render.com) and sign up with GitHub
-2. Click **"New"** → **"Web Service"** → connect your `escrow-build` repo
+2. Click **"New"** → **"Web Service"** → connect your `advault` repo
 3. Render auto-detects the `Dockerfile`
-4. Set **Name** to `escrow-build`
+4. Set **Name** to `advault`
 5. Pick the **Free** instance type
 6. Under **Environment Variables**, add:
 
 ```env
 BOT_TOKEN=your-bot-token-from-botfather
-MINI_APP_URL=https://escrow-build.onrender.com
+MINI_APP_URL=https://advault.onrender.com
 TON_NETWORK=testnet
 TON_MASTER_MNEMONIC=word1 word2 word3 ...
 TON_MASTER_WALLET_ADDRESS=EQA...
@@ -74,7 +74,7 @@ Generate the encryption key with `openssl rand -hex 32` if you don't have one.
 ### Step 3: Add Postgres on Render
 
 1. In the Render dashboard, click **"New"** → **"PostgreSQL"**
-2. Name it `escrow-build-db`, pick the **Free** tier
+2. Name it `advault-db`, pick the **Free** tier
 3. After creation, copy the **Internal Database URL** from the database info page
 4. Go back to your web service → **Environment** → add `DATABASE_URL` with the internal URL
 5. Render redeploys automatically after adding the variable
@@ -93,7 +93,7 @@ Render's free tier sleeps after 15 minutes of no inbound requests. Fix this with
 
 1. Go to [uptimerobot.com](https://uptimerobot.com) and sign up (free)
 2. Click **"Add New Monitor"**
-3. Set type to **HTTP(s)**, URL to `https://escrow-build.onrender.com/api/health`
+3. Set type to **HTTP(s)**, URL to `https://advault.onrender.com/api/health`
 4. Set interval to **5 minutes**
 5. Save — UptimeRobot pings your app every 5 min, keeping it awake 24/7
 
@@ -102,7 +102,7 @@ Render's free tier sleeps after 15 minutes of no inbound requests. Fix this with
 - Check Render deploy logs for `Server running on port 3000` and `Bot @yourbot started`
 - Open Telegram, send `/start` to your bot
 - Test `/help`, `/addchannel`, `/mychannels`
-- Open `https://escrow-build.onrender.com` to verify the Mini App loads
+- Open `https://advault.onrender.com` to verify the Mini App loads
 
 Optional: `YOUTUBE_API_KEY` (for YouTube channel support), `TON_API_KEY` / `TON_API_KEY_FALLBACK` (TonCenter rate limits).
 
@@ -211,7 +211,7 @@ Every deal progresses through a validated state machine. Invalid transitions are
 ## Architecture
 
 ```
-escrowBUILD/
+AdVault/
   docker-compose.yml            <- Postgres + Redis
   server/
     src/
@@ -385,7 +385,7 @@ npm run test:watch # watch mode
 
 ```env
 # Database
-DATABASE_URL="postgresql://escrow:escrow_dev@localhost:5432/escrowbuild"
+DATABASE_URL="postgresql://escrow:escrow_dev@localhost:5432/advault"
 REDIS_URL="redis://localhost:6379"
 
 # Telegram

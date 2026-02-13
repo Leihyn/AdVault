@@ -29,7 +29,7 @@ export async function startCommand(ctx: Context) {
     .webApp('Open Marketplace', config.MINI_APP_URL);
 
   await ctx.reply(
-    `Welcome to escrowBUILD, ${ctx.from.first_name}!\n\n` +
+    `Welcome to AdVault, ${ctx.from.first_name}!\n\n` +
     `The safe way to buy and sell Telegram channel ads.\n\n` +
     `Escrow protects both sides: advertisers pay into a locked wallet, ` +
     `funds release only after the ad is posted and verified.\n\n` +

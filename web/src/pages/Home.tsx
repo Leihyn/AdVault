@@ -14,7 +14,7 @@ export function Home() {
     <div>
       {/* Hero banner */}
       <div className="hero">
-        <div className="hero__title">escrowBUILD</div>
+        <div className="hero__title">AdVault</div>
         <div className="hero__subtitle">
           {user ? `Welcome back, ${user.first_name}` : 'Trustless ads marketplace with TON escrow'}
         </div>

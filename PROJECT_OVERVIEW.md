@@ -1,6 +1,6 @@
-# escrowBUILD -- Project Overview
+# AdVault -- Project Overview
 
-Telegram channel advertising runs on trust. Advertisers wire money and hope the post goes live. Channel owners deliver content and hope the payment clears. There's no escrow, no verification, no recourse. escrowBUILD replaces trust with TON-based smart contract escrow, automated post verification, and a privacy-preserving fund relay.
+Telegram channel advertising runs on trust. Advertisers wire money and hope the post goes live. Channel owners deliver content and hope the payment clears. There's no escrow, no verification, no recourse. AdVault replaces trust with TON-based smart contract escrow, automated post verification, and a privacy-preserving fund relay.
 
 ## Architecture
 

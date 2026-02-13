@@ -84,7 +84,7 @@ async function checkProfileForToken(
 
     const res = await fetch(profileUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; EscrowBuild/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; AdVault/1.0)',
         'Accept': 'text/html',
       },
       redirect: 'follow',
