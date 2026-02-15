@@ -2,6 +2,9 @@ import { PrismaClient, DealStatus, Prisma } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { generateAlias, decryptField } from '../utils/privacy.js';
 import { toDecimal } from '../utils/decimal.js';
+import { notifyStatusChange } from './notification.service.js';
+import { refundFunds } from './escrow.service.js';
+import { config } from '../config.js';
 
 const prisma = new PrismaClient();
 
@@ -66,7 +69,7 @@ export async function createDeal(data: {
         escrowMnemonicEncrypted: data.escrowMnemonicEncrypted,
         ownerAlias: generateAlias('Seller'),
         advertiserAlias: generateAlias('Buyer'),
-        verificationWindowHours: data.verificationWindowHours ?? 24,
+        verificationWindowHours: data.verificationWindowHours ?? config.VERIFY_HOLD_HOURS,
         brief: data.brief || null,
         assets: data.assets?.length ? data.assets : undefined,
         status: 'PENDING_PAYMENT',
@@ -254,9 +257,18 @@ export async function cancelDeal(dealId: number, userId: number) {
   const isOwner = deal.channel.ownerId === userId;
   if (!isAdvertiser && !isOwner) throw new ForbiddenError('Not a party to this deal');
 
-  return transitionDeal(dealId, 'CANCELLED', userId, {
+  // If funds have been escrowed, refund them to the advertiser instead of just cancelling.
+  // refundFunds() handles the full transfer and transitions the deal to REFUNDED.
+  if (deal.escrowMnemonicEncrypted && deal.status !== 'PENDING_PAYMENT') {
+    await refundFunds(dealId);
+    return prisma.deal.findUniqueOrThrow({ where: { id: dealId } });
+  }
+
+  const result = await transitionDeal(dealId, 'CANCELLED', userId, {
     cancelledBy: isAdvertiser ? 'advertiser' : 'owner',
   });
+  await notifyStatusChange(dealId, 'CANCELLED');
+  return result;
 }
 
 export async function disputeDeal(dealId: number, userId: number, reason: string) {

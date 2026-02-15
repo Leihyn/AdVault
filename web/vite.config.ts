@@ -6,6 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     allowedHosts: ['.trycloudflare.com'],
+    hmr: {
+      // Through Cloudflare tunnel, the WebSocket can't connect back.
+      // Use the tunnel host so HMR works instead of causing full reloads.
+      clientPort: 443,
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

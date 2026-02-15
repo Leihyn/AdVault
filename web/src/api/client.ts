@@ -195,10 +195,6 @@ export function cancelDeal(id: number) {
   return request<any>(`/deals/${id}/cancel`, { method: 'POST', body: '{}' });
 }
 
-export function disputeDeal(id: number, reason: string) {
-  return request<any>(`/deals/${id}/dispute`, { method: 'POST', body: JSON.stringify({ reason }) });
-}
-
 // --- Creatives ---
 export function submitCreative(dealId: number, data: any) {
   return request<any>(`/deals/${dealId}/creative`, { method: 'POST', body: JSON.stringify(data) });

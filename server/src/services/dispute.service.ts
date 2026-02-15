@@ -1,7 +1,8 @@
 import { PrismaClient, DisputeOutcome } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { transitionDeal } from './deal.service.js';
-import { releaseFunds, refundFunds } from './escrow.service.js';
+import { notifyStatusChange } from './notification.service.js';
+import { releaseFunds, refundFunds, splitFunds } from './escrow.service.js';
 
 const prisma = new PrismaClient();
 
@@ -40,6 +41,7 @@ export async function openDispute(dealId: number, userId: number, reason: string
     disputedBy: isAdvertiser ? 'advertiser' : 'owner',
     reason,
   });
+  await notifyStatusChange(dealId, 'DISPUTED');
 
   const dispute = await prisma.dispute.create({
     data: {
@@ -260,6 +262,7 @@ async function executeResolution(
           resolvedVia: 'dispute',
           outcome: 'release_to_owner',
         });
+        await notifyStatusChange(dealId, 'COMPLETED');
         break;
 
       case 'REFUND_TO_ADVERTISER':
@@ -268,33 +271,18 @@ async function executeResolution(
           resolvedVia: 'dispute',
           outcome: 'refund_to_advertiser',
         });
+        await notifyStatusChange(dealId, 'REFUNDED');
         break;
 
       case 'SPLIT':
-        // For splits, we refund the full amount to the advertiser for now.
-        // A proper split would require two transfers from escrow, which the
-        // current two-hop architecture doesn't support neatly. In practice,
-        // the admin or system would coordinate the split off-chain or via
-        // two sequential operations. For now, release to owner (they get the
-        // larger portion) and the platform handles the advertiser's share manually.
-        //
-        // TODO: Implement proper split transfers when the escrow supports it.
-        // For now: if owner gets >= 50%, release to owner. Otherwise, refund.
-        if (splitPercent >= 50) {
-          await releaseFunds(dealId);
-          await transitionDeal(dealId, 'COMPLETED', resolvedById, {
-            resolvedVia: 'dispute',
-            outcome: 'split',
-            ownerPercent: splitPercent,
-          });
-        } else {
-          await refundFunds(dealId);
-          await transitionDeal(dealId, 'REFUNDED', resolvedById, {
-            resolvedVia: 'dispute',
-            outcome: 'split',
-            ownerPercent: splitPercent,
-          });
-        }
+        await splitFunds(dealId, splitPercent);
+        await transitionDeal(dealId, 'COMPLETED', resolvedById, {
+          resolvedVia: 'dispute',
+          outcome: 'split',
+          ownerPercent: splitPercent,
+          advertiserPercent: 100 - splitPercent,
+        });
+        await notifyStatusChange(dealId, 'COMPLETED');
         break;
     }
   } catch (error) {

@@ -13,6 +13,7 @@ const envSchema = z.object({
   ESCROW_ENCRYPTION_KEY: z.string().default('0'.repeat(64)),
   YOUTUBE_API_KEY: z.string().default(''),
   PURGE_AFTER_DAYS: z.coerce.number().default(30),
+  VERIFY_HOLD_HOURS: z.coerce.number().default(24),
   PLATFORM_FEE_PERCENT: z.coerce.number().default(5),
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

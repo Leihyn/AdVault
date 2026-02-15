@@ -1,3 +1,17 @@
+---
+pdf_options:
+  displayHeaderFooter: true
+  headerTemplate: '<span></span>'
+  footerTemplate: '<div style="width:100%;text-align:center;font-size:10px;color:#888;"><span class="pageNumber"></span></div>'
+  margin:
+    top: 25mm
+    bottom: 20mm
+    left: 25mm
+    right: 25mm
+---
+
+<img src="logo.jpeg" alt="AdVault" width="80" />
+
 # AdVault -- Project Overview
 
 Telegram channel advertising runs on trust. Advertisers wire money and hope the post goes live. Channel owners deliver content and hope the payment clears. There's no escrow, no verification, no recourse. AdVault replaces trust with TON-based smart contract escrow, automated post verification, and a privacy-preserving fund relay.

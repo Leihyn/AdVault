@@ -2,6 +2,7 @@ import { generateWallet, getEscrowBalance, transferFunds, transferFromMaster } f
 import { PrismaClient } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { transitionDeal } from './deal.service.js';
+import { notifyStatusChange } from './notification.service.js';
 import { config } from '../config.js';
 import { toNanotons, subtractFee, decimalToString } from '../utils/decimal.js';
 import { verifyChannelAdmin } from '../utils/adminGuard.js';
@@ -45,6 +46,7 @@ export async function checkEscrowFunding(dealId: number): Promise<boolean> {
 
   if (balance >= minAcceptable) {
     await transitionDeal(dealId, 'FUNDED');
+    await notifyStatusChange(dealId, 'FUNDED');
     await transitionDeal(dealId, 'CREATIVE_PENDING');
 
     await prisma.transaction.create({
@@ -136,6 +138,7 @@ export async function releaseFunds(dealId: number) {
       });
 
       await transitionDeal(dealId, 'COMPLETED');
+      await notifyStatusChange(dealId, 'COMPLETED');
       return hop2TxId;
     } catch (error) {
       // Hop 2 failed — saga record persists for recovery worker
@@ -170,6 +173,7 @@ export async function releaseFunds(dealId: number) {
   });
 
   await transitionDeal(dealId, 'COMPLETED');
+  await notifyStatusChange(dealId, 'COMPLETED');
   return txHash;
 }
 
@@ -232,6 +236,7 @@ export async function refundFunds(dealId: number) {
       });
 
       await transitionDeal(dealId, 'REFUNDED');
+      await notifyStatusChange(dealId, 'REFUNDED');
       return hop2TxId;
     } catch (error) {
       await prisma.pendingTransfer.update({
@@ -265,7 +270,132 @@ export async function refundFunds(dealId: number) {
   });
 
   await transitionDeal(dealId, 'REFUNDED');
+  await notifyStatusChange(dealId, 'REFUNDED');
   return txHash;
+}
+
+/**
+ * Splits escrowed funds between owner and advertiser per the given percentage.
+ * ownerPercent = percentage of (total minus platform fee) that goes to the owner.
+ *
+ * Flow: Escrow → Master (full amount), then Master → Owner + Master → Advertiser.
+ * Each hop-2 transfer gets its own PendingTransfer for recovery.
+ */
+export async function splitFunds(dealId: number, ownerPercent: number) {
+  const deal = await prisma.deal.findUnique({
+    where: { id: dealId },
+    include: {
+      channel: { include: { owner: true } },
+      advertiser: true,
+    },
+  });
+  if (!deal || !deal.escrowMnemonicEncrypted) throw new Error('Deal not found or no escrow');
+
+  const ownerWallet = deal.channel.owner.tonWalletAddress;
+  const advertiserWallet = deal.advertiser.tonWalletAddress;
+  if (!ownerWallet) throw new Error('Channel owner has no wallet address');
+  if (!advertiserWallet) throw new Error('Advertiser has no wallet address');
+
+  const amount = deal.amountTon as unknown as Decimal;
+  const { fee, payout } = subtractFee(amount, config.PLATFORM_FEE_PERCENT);
+  const masterAddress = config.TON_MASTER_WALLET_ADDRESS;
+
+  // Calculate each party's share of the payout (after platform fee)
+  const ownerShare = payout.mul(ownerPercent).div(100);
+  const advertiserShare = payout.sub(ownerShare);
+
+  if (!masterAddress) {
+    throw new Error('Split transfers require a master wallet (two-hop relay)');
+  }
+
+  // Hop 1: Escrow → Master (full amount)
+  const hop1TxId = await transferFunds(
+    deal.escrowMnemonicEncrypted,
+    masterAddress,
+    decimalToString(amount),
+  );
+
+  // Hop 2a: Master → Owner (if owner share > 0)
+  if (ownerShare.gt(0)) {
+    const ownerTransfer = await prisma.pendingTransfer.create({
+      data: {
+        dealId,
+        type: 'RELEASE',
+        recipientAddress: ownerWallet,
+        amountTon: ownerShare,
+        hop1TxId,
+      },
+    });
+
+    try {
+      const hop2aTxId = await transferFromMaster(ownerWallet, decimalToString(ownerShare));
+      await prisma.pendingTransfer.update({
+        where: { id: ownerTransfer.id },
+        data: { hop2TxId: hop2aTxId, completedAt: new Date() },
+      });
+      await prisma.transaction.create({
+        data: {
+          dealId,
+          type: 'RELEASE',
+          amountTon: ownerShare,
+          txHash: hop2aTxId,
+          fromAddress: masterAddress,
+          toAddress: ownerWallet,
+          confirmedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      await prisma.pendingTransfer.update({
+        where: { id: ownerTransfer.id },
+        data: {
+          lastError: error instanceof Error ? error.message : String(error),
+          retries: { increment: 1 },
+        },
+      });
+      console.error(`Split: owner transfer failed for deal ${dealId}, recovery worker will retry`);
+    }
+  }
+
+  // Hop 2b: Master → Advertiser (if advertiser share > 0)
+  if (advertiserShare.gt(0)) {
+    const advTransfer = await prisma.pendingTransfer.create({
+      data: {
+        dealId,
+        type: 'REFUND',
+        recipientAddress: advertiserWallet,
+        amountTon: advertiserShare,
+        hop1TxId,
+      },
+    });
+
+    try {
+      const hop2bTxId = await transferFromMaster(advertiserWallet, decimalToString(advertiserShare));
+      await prisma.pendingTransfer.update({
+        where: { id: advTransfer.id },
+        data: { hop2TxId: hop2bTxId, completedAt: new Date() },
+      });
+      await prisma.transaction.create({
+        data: {
+          dealId,
+          type: 'REFUND',
+          amountTon: advertiserShare,
+          txHash: hop2bTxId,
+          fromAddress: masterAddress,
+          toAddress: advertiserWallet,
+          confirmedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      await prisma.pendingTransfer.update({
+        where: { id: advTransfer.id },
+        data: {
+          lastError: error instanceof Error ? error.message : String(error),
+          retries: { increment: 1 },
+        },
+      });
+      console.error(`Split: advertiser transfer failed for deal ${dealId}, recovery worker will retry`);
+    }
+  }
 }
 
 /**

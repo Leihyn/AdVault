@@ -7,12 +7,14 @@ import {
   addAdFormatSchema,
   updateAdFormatSchema,
   addAdminSchema,
+  parseParamId,
 } from '../schemas/index.js';
 import * as channelService from '../../services/channel.service.js';
 import * as verificationService from '../../services/verification.service.js';
 import { PrismaClient } from '@prisma/client';
 import { platformRegistry } from '../../platforms/registry.js';
 import { YouTubeAdapter } from '../../platforms/youtube.adapter.js';
+import { ForbiddenError, AppError } from '../../utils/errors.js';
 
 const prisma = new PrismaClient();
 
@@ -26,7 +28,7 @@ export async function channelRoutes(app: FastifyInstance) {
 
   // Get channel detail
   app.get<{ Params: { id: string } }>('/api/channels/:id', async (request) => {
-    return channelService.getChannel(Number(request.params.id));
+    return channelService.getChannel(parseParamId(request.params.id));
   });
 
   // Register a new channel (supports all platforms)
@@ -80,7 +82,7 @@ export async function channelRoutes(app: FastifyInstance) {
     async (request) => {
       const body = updateChannelSchema.parse(request.body);
       return channelService.updateChannel(
-        Number(request.params.id),
+        parseParamId(request.params.id),
         request.telegramUser.id,
         body,
       );
@@ -92,12 +94,12 @@ export async function channelRoutes(app: FastifyInstance) {
     '/api/channels/:id/refresh-stats',
     { preHandler: authMiddleware },
     async (request) => {
-      const channelId = Number(request.params.id);
+      const channelId = parseParamId(request.params.id);
       const channel = await channelService.getChannel(channelId);
 
       // Only owner can refresh
       if (channel.ownerId !== request.telegramUser.id) {
-        throw new Error('Only the channel owner can refresh stats');
+        throw new ForbiddenError('Only the channel owner can refresh stats');
       }
 
       const adapter = platformRegistry.get(channel.platform);
@@ -124,7 +126,7 @@ export async function channelRoutes(app: FastifyInstance) {
     async (request) => {
       const body = addAdFormatSchema.parse(request.body);
       return channelService.addAdFormat(
-        Number(request.params.id),
+        parseParamId(request.params.id),
         request.telegramUser.id,
         body,
       );
@@ -138,7 +140,7 @@ export async function channelRoutes(app: FastifyInstance) {
     async (request) => {
       const body = updateAdFormatSchema.parse(request.body);
       return channelService.updateAdFormat(
-        Number(request.params.formatId),
+        parseParamId(request.params.formatId),
         request.telegramUser.id,
         body,
       );
@@ -151,7 +153,7 @@ export async function channelRoutes(app: FastifyInstance) {
     { preHandler: authMiddleware },
     async (request) => {
       return channelService.deleteAdFormat(
-        Number(request.params.formatId),
+        parseParamId(request.params.formatId),
         request.telegramUser.id,
       );
     },
@@ -162,7 +164,7 @@ export async function channelRoutes(app: FastifyInstance) {
     '/api/channels/:id/admins',
     { preHandler: authMiddleware },
     async (request) => {
-      return channelService.getChannelAdmins(Number(request.params.id));
+      return channelService.getChannelAdmins(parseParamId(request.params.id));
     },
   );
 
@@ -173,7 +175,7 @@ export async function channelRoutes(app: FastifyInstance) {
     async (request) => {
       const body = addAdminSchema.parse(request.body);
       return channelService.addChannelAdmin(
-        Number(request.params.id),
+        parseParamId(request.params.id),
         request.telegramUser.id,
         body,
       );
@@ -185,16 +187,16 @@ export async function channelRoutes(app: FastifyInstance) {
     '/api/channels/:id/admins/sync',
     { preHandler: authMiddleware },
     async (request) => {
-      const channelId = Number(request.params.id);
+      const channelId = parseParamId(request.params.id);
       const channel = await channelService.getChannel(channelId);
 
       if (channel.ownerId !== request.telegramUser.id) {
-        throw new Error('Only the channel owner can sync admins');
+        throw new ForbiddenError('Only the channel owner can sync admins');
       }
 
       const adapter = platformRegistry.get(channel.platform);
       if (!adapter.fetchAdmins) {
-        throw new Error('Admin sync not supported for this platform');
+        throw new AppError('Admin sync not supported for this platform');
       }
 
       const platformChannelId = channel.platformChannelId || String(channel.telegramChatId);
@@ -253,7 +255,7 @@ export async function channelRoutes(app: FastifyInstance) {
     { preHandler: authMiddleware },
     async (request) => {
       return verificationService.generateVerificationToken(
-        Number(request.params.id),
+        parseParamId(request.params.id),
         request.telegramUser.id,
       );
     },
@@ -265,7 +267,7 @@ export async function channelRoutes(app: FastifyInstance) {
     { preHandler: authMiddleware },
     async (request) => {
       return verificationService.checkVerification(
-        Number(request.params.id),
+        parseParamId(request.params.id),
         request.telegramUser.id,
       );
     },

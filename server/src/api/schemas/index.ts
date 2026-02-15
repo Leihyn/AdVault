@@ -47,7 +47,7 @@ export const addAdFormatSchema = z.object({
   formatType: z.enum(['POST', 'FORWARD', 'STORY', 'CUSTOM', 'VIDEO', 'REEL', 'TWEET', 'COMMUNITY_POST']),
   label: z.string().min(1).max(100),
   description: z.string().max(1000).optional(),
-  priceTon: z.number().positive().max(1_000_000),
+  priceTon: z.number().nonnegative().max(1_000_000),
 });
 
 export const updateAdFormatSchema = z.object({
@@ -165,9 +165,9 @@ export const revisionSchema = z.object({
 });
 
 // --- User Schemas ---
-// Role is NOT user-editable — derived from actions (registering a channel, creating a campaign)
 export const updateUserSchema = z.object({
   tonWalletAddress: z.string().max(128).optional(),
+  role: z.enum(['OWNER', 'ADVERTISER', 'BOTH']).optional(),
 });
 
 // Pagination helper

@@ -28,7 +28,9 @@ export async function verifyChannelAdmin(channelId: number, actingUserId: number
   if (!channel) throw new ForbiddenError('Channel not found');
 
   // Skip verification if no adapter is registered (e.g. test environment)
+  // or if in development mode (test channels may have fake chat IDs)
   if (!platformRegistry.has(channel.platform)) return;
+  if (process.env.NODE_ENV === 'development') return;
 
   const adapter = platformRegistry.get(channel.platform);
   const platformChannelId = channel.platformChannelId || String(channel.telegramChatId);

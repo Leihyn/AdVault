@@ -9,6 +9,7 @@ import { config } from './config.js';
 import { registerRoutes } from './api/index.js';
 import { createBot } from './bot/index.js';
 import { createWorkers } from './workers/index.js';
+import { setBotInstance } from './bot/instance.js';
 
 async function main() {
   // --- Fastify server ---
@@ -19,10 +20,10 @@ async function main() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", 'telegram.org', '*.telegram.org'],
+        scriptSrc: ["'self'", "'unsafe-inline'", 'telegram.org', '*.telegram.org'],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'https:'],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", 'https:', 'wss:'],
         frameSrc: ["'none'"],
       },
     },
@@ -51,8 +52,8 @@ async function main() {
 
   await registerRoutes(app);
 
-  // --- Static file serving (production) ---
-  if (config.NODE_ENV === 'production') {
+  // --- Static file serving (production + dev with built frontend) ---
+  {
     const webDistPath = path.join(__dirname, '..', '..', 'web', 'dist');
 
     await app.register(fastifyStatic, {
@@ -73,6 +74,7 @@ async function main() {
 
   // --- Telegram bot ---
   const bot = createBot();
+  setBotInstance(bot);
 
   // --- Background workers ---
   const workers = createWorkers(bot);

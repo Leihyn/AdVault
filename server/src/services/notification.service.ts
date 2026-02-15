@@ -1,5 +1,6 @@
 import { Bot } from 'grammy';
 import { PrismaClient, DealStatus } from '@prisma/client';
+import { getBotInstance } from '../bot/instance.js';
 
 const prisma = new PrismaClient();
 
@@ -175,5 +176,19 @@ export async function notifyTimeoutWarning(
     } catch (error) {
       console.error(`Failed to send timeout warning to ${telegramId}:`, error);
     }
+  }
+}
+
+/**
+ * Convenience wrapper: sends deal status notification using the global bot instance.
+ * Safe to call from services — silently skips if bot isn't initialized (e.g. in tests).
+ */
+export async function notifyStatusChange(dealId: number, newStatus: DealStatus) {
+  const bot = getBotInstance();
+  if (!bot) return;
+  try {
+    await notifyDealStatusChange(bot, dealId, newStatus);
+  } catch (error) {
+    console.error(`Notification failed for deal ${dealId} → ${newStatus}:`, error);
   }
 }

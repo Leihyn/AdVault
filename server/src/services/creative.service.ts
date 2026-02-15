@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { transitionDeal } from './deal.service.js';
+import { notifyStatusChange } from './notification.service.js';
 import { encryptField, decryptField } from '../utils/privacy.js';
 import { verifyChannelAdmin } from '../utils/adminGuard.js';
 
@@ -57,6 +58,7 @@ export async function submitCreative(
   });
 
   await transitionDeal(dealId, 'CREATIVE_SUBMITTED', userId);
+  await notifyStatusChange(dealId, 'CREATIVE_SUBMITTED');
   // Return decrypted version to the caller
   return decryptCreative(creative);
 }
@@ -79,6 +81,7 @@ export async function approveCreative(dealId: number, userId: number) {
   });
 
   await transitionDeal(dealId, 'CREATIVE_APPROVED', userId);
+  await notifyStatusChange(dealId, 'CREATIVE_APPROVED');
   return decryptCreative(creative);
 }
 
@@ -100,6 +103,7 @@ export async function requestRevision(dealId: number, userId: number, notes: str
   });
 
   await transitionDeal(dealId, 'CREATIVE_REVISION', userId);
+  await notifyStatusChange(dealId, 'CREATIVE_REVISION');
   return decryptCreative(creative);
 }
 

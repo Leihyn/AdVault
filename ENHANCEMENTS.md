@@ -24,35 +24,49 @@ Tracked issues, planned features, and UX improvements discovered during testing.
 ## P1 — Should Build
 
 ### TON Connect integration
-- **Priority**: High
-- **Why**: Current flow shows a raw TON address and asks users to manually send from an external wallet. This is confusing and error-prone.
-- **What**: Integrate `@tonconnect/ui-react` so users can:
-  1. Tap "Pay 0.2 TON"
-  2. Tonkeeper / MyTonWallet opens inside Telegram
-  3. One-tap confirm
-  4. Done — no copy-pasting addresses
-- Also gives us the user's wallet address for free (refunds, profile)
-- Standard for all TON Mini Apps
+- **Status**: Done
+- Integrated `@tonconnect/ui-react` with `TonConnectUIProvider` wrapping the app
+- DealDetail: "Pay X TON" button sends transaction via connected wallet (Tonkeeper/MyTonWallet)
+- Profile: "Connect TON Wallet" button with auto-save of wallet address
+- Manual address copy preserved as fallback
+- Manifest at `/tonconnect-manifest.json`
 
 ### Copy-to-clipboard on escrow address
-- Tapping the escrow address should copy it (until TON Connect replaces this flow)
-- Use `navigator.clipboard.writeText()` with haptic feedback via `Telegram.WebApp.HapticFeedback`
+- **Status**: Done
+- Both escrow and payment addresses are tappable with "Tap to copy" hint
+- Uses `navigator.clipboard.writeText()` with haptic feedback
+- Visual "Copied!" confirmation with 2s auto-reset
 
 ### Error toasts / feedback
-- API errors fail silently in the Mini App (e.g., the "Get Payment Address" button did nothing when the server returned 500)
-- Add a global error toast/notification component
-- Show user-friendly messages for common errors
+- **Status**: Done
+- Global `ToastProvider` using `@telegram-apps/telegram-ui` Snackbar component
+- `MutationCache.onError` catches all unhandled mutation errors and shows toast
+- `useToast()` hook for manual success/info/error toasts
+- Key actions (approve, cancel) show success toasts
 
 ### Shorten verification hold for testnet
-- 24-hour post verification hold is too long for testing
-- Add an env var `VERIFY_HOLD_HOURS` (default 24, set to 0 or 1 for testing)
+- **Status**: Done
+- Added `VERIFY_HOLD_HOURS` env var to config (default 24)
+- `deal.service.ts` uses config value instead of hardcoded 24
+- Set to 0 or 1 in `.env` for testing
 
 ### Deal notifications in Telegram
-- Bot should DM both parties on key state changes:
-  - Payment received (FUNDED)
-  - Creative submitted / approved / revision requested
-  - Post scheduled / posted / verified
-  - Deal completed / cancelled / refunded
+- **Status**: Done
+- Added `notifyStatusChange()` convenience function using global bot singleton
+- All services now send DM notifications on state changes:
+  - `creative.service.ts`: CREATIVE_SUBMITTED, CREATIVE_APPROVED, CREATIVE_REVISION
+  - `escrow.service.ts`: FUNDED, COMPLETED, REFUNDED
+  - `deal.service.ts`: CANCELLED
+  - `dispute.service.ts`: DISPUTED, COMPLETED, REFUNDED
+  - `proof.service.ts`: POSTED, TRACKING
+- Safe to call in tests (silently skips if bot not initialized)
+
+### Deal split transfers
+- **Status**: Done
+- `splitFunds()` in escrow.service.ts implements proper two-party split
+- Escrow -> Master (full amount), then Master -> Owner + Master -> Advertiser
+- Each hop-2 transfer has its own PendingTransfer for recovery
+- Dispute resolution SPLIT case now uses actual split instead of all-or-nothing
 
 ## P2 — Nice to Have
 

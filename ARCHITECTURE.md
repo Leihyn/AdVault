@@ -1,3 +1,17 @@
+---
+pdf_options:
+  displayHeaderFooter: true
+  headerTemplate: '<span></span>'
+  footerTemplate: '<div style="width:100%;text-align:center;font-size:10px;color:#888;"><span class="pageNumber"></span></div>'
+  margin:
+    top: 25mm
+    bottom: 20mm
+    left: 25mm
+    right: 25mm
+---
+
+<img src="logo.jpeg" alt="AdVault" width="80" />
+
 # AdVault — Architecture & System Design
 
 A trustless Telegram ads marketplace where advertisers fund per-deal TON escrow wallets, channel owners submit creatives for approval, and a bot auto-posts, verifies delivery after 24h, then releases funds — no middleman, no trust required.
