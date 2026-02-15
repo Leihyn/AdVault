@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Section, Button, Chip, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
 import { createChannel } from '../api/client.js';
-import { IconYouTube, IconInstagram, IconTwitter, IconTikTok } from '../components/Icons.js';
+import { IconTelegram, IconYouTube, IconInstagram, IconTwitter, IconTikTok } from '../components/Icons.js';
 
 const PLATFORMS = [
+  { label: 'Telegram', value: 'TELEGRAM', icon: <IconTelegram /> },
   { label: 'YouTube', value: 'YOUTUBE', icon: <IconYouTube /> },
   { label: 'Instagram', value: 'INSTAGRAM', icon: <IconInstagram /> },
   { label: 'Twitter/X', value: 'TWITTER', icon: <IconTwitter /> },
@@ -41,6 +42,7 @@ const inputStyle: React.CSSProperties = {
 
 function getPlaceholder(platform: string): string {
   switch (platform) {
+    case 'TELEGRAM': return 'Channel username (e.g. durov)';
     case 'YOUTUBE': return 'Channel URL or ID (e.g. youtube.com/@MrBeast or UC...)';
     case 'INSTAGRAM': return 'Username (e.g. natgeo)';
     case 'TWITTER': return 'Username (e.g. elonmusk)';
@@ -51,6 +53,7 @@ function getPlaceholder(platform: string): string {
 
 function getInputLabel(platform: string): string {
   switch (platform) {
+    case 'TELEGRAM': return 'Telegram Channel Username';
     case 'YOUTUBE': return 'Channel URL or ID';
     case 'INSTAGRAM': return 'Instagram Username';
     case 'TWITTER': return 'Twitter/X Username';
@@ -63,7 +66,7 @@ export function RegisterChannel() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [platform, setPlatform] = useState('YOUTUBE');
+  const [platform, setPlatform] = useState('TELEGRAM');
   const [channelInput, setChannelInput] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -104,7 +107,7 @@ export function RegisterChannel() {
       <div className="page-header">
         <Title level="2" weight="1">Register Channel</Title>
         <Text style={{ color: 'var(--tgui--hint_color)' }}>
-          Add your YouTube, Instagram, or Twitter/X channel
+          Add your Telegram, YouTube, Instagram, or Twitter/X channel
         </Text>
       </div>
 
@@ -135,6 +138,11 @@ export function RegisterChannel() {
             placeholder={getPlaceholder(platform)}
             style={inputStyle}
           />
+          {platform === 'TELEGRAM' && (
+            <Text style={{ color: 'var(--tgui--hint_color)', fontSize: '12px', marginTop: '6px', display: 'block' }}>
+              Enter your channel username without the @ symbol. The bot must be added as admin to verify ownership.
+            </Text>
+          )}
           {platform === 'YOUTUBE' && (
             <Text style={{ color: 'var(--tgui--hint_color)', fontSize: '12px', marginTop: '6px', display: 'block' }}>
               Paste a channel URL, @handle, or UC... ID. Stats will be fetched automatically.
