@@ -7,3 +7,4 @@ dist/
 server/prisma/*.db
 server/prisma/migrations/
 SUBMISSION.md
+demo-video/
