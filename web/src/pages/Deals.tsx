@@ -18,7 +18,7 @@ export function Deals() {
   const params: Record<string, string> = {};
   if (roleFilter) params.role = roleFilter;
 
-  const { data: deals, isLoading } = useQuery({
+  const { data: deals, isLoading, isError } = useQuery({
     queryKey: ['deals', params],
     queryFn: () => fetchDeals(params),
   });
@@ -38,6 +38,9 @@ export function Deals() {
       </div>
 
       {isLoading && <Placeholder><Spinner size="m" /></Placeholder>}
+      {isError && (
+        <Placeholder header="Failed to load deals" description="Check your connection and try again." />
+      )}
 
       {deals?.length > 0 && (
         <Section>

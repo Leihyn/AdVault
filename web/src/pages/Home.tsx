@@ -8,12 +8,13 @@ import { useTelegram } from '../hooks/useTelegram.js';
 export function Home() {
   const { user } = useTelegram();
   const navigate = useNavigate();
-  const { data: stats, isLoading } = useQuery({ queryKey: ['stats'], queryFn: fetchPlatformStats });
+  const { data: stats, isLoading, isError } = useQuery({ queryKey: ['stats'], queryFn: fetchPlatformStats });
 
   return (
     <div>
       {/* Hero banner */}
       <div className="hero">
+        <img src="/logo.jpeg" alt="AdVault" style={{ width: 48, height: 48, borderRadius: 12, marginBottom: 8 }} />
         <div className="hero__title">AdVault</div>
         <div className="hero__subtitle">
           {user ? `Welcome back, ${user.first_name}` : 'Trustless ads marketplace with TON escrow'}
@@ -23,6 +24,9 @@ export function Home() {
       {/* Stats grid */}
       {isLoading && (
         <Placeholder><Spinner size="m" /></Placeholder>
+      )}
+      {isError && (
+        <div className="callout callout--error" style={{ margin: '0 16px 16px' }}>Failed to load stats.</div>
       )}
       {stats && (
         <div className="stat-grid" style={{ marginBottom: '16px' }}>

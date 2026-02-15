@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
  * Shows the Telegram BackButton on sub-pages and hides it on root tabs.
  * Falls back to browser history.back() outside of Telegram.
  */
-const ROOT_PATHS = ['/', '/channels', '/campaigns', '/deals', '/profile'];
+const ROOT_PATHS = ['/', '/channels', '/campaigns', '/deals', '/new', '/activity', '/profile'];
 
 export function useBackButton() {
   const navigate = useNavigate();

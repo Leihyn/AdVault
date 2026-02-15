@@ -1,6 +1,7 @@
 import { PrismaClient, RequirementStatus } from '@prisma/client';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { transitionDeal } from './deal.service.js';
+import { notifyStatusChange } from './notification.service.js';
 import { platformRegistry } from '../platforms/registry.js';
 import { verifyChannelAdmin } from '../utils/adminGuard.js';
 import { hashCreativeContent } from '../utils/privacy.js';
@@ -36,10 +37,13 @@ export async function submitPostProof(dealId: number, userId: number, postUrl: s
     throw new AppError('Could not parse post URL. Make sure it is a valid link for this platform.');
   }
 
-  const platformChannelId = deal.channel.platformChannelId || String(deal.channel.telegramChatId);
-  const exists = await adapter.verifyPostExists(platformChannelId, platformPostId);
-  if (!exists) {
-    throw new AppError('Post not found. Make sure the post is live and the URL is correct.');
+  // In development, skip live post verification (fake channels can't be checked)
+  if (process.env.NODE_ENV !== 'development') {
+    const platformChannelId = deal.channel.platformChannelId || String(deal.channel.telegramChatId);
+    const exists = await adapter.verifyPostExists(platformChannelId, platformPostId);
+    if (!exists) {
+      throw new AppError('Post not found. Make sure the post is live and the URL is correct.');
+    }
   }
 
   const now = new Date();
@@ -67,7 +71,9 @@ export async function submitPostProof(dealId: number, userId: number, postUrl: s
 
   // CREATIVE_APPROVED → POSTED → TRACKING
   await transitionDeal(dealId, 'POSTED', userId, { postProofUrl: postUrl });
+  await notifyStatusChange(dealId, 'POSTED');
   await transitionDeal(dealId, 'TRACKING', undefined, { trackingStartedAt: now.toISOString() });
+  await notifyStatusChange(dealId, 'TRACKING');
 
   return { success: true, platformPostId };
 }

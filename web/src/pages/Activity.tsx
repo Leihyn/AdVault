@@ -14,12 +14,13 @@ const TABS = [
 
 function DealsTab() {
   const navigate = useNavigate();
-  const { data: deals, isLoading } = useQuery({
+  const { data: deals, isLoading, isError } = useQuery({
     queryKey: ['deals', {}],
     queryFn: () => fetchDeals(),
   });
 
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load deals" description="Check your connection and try again." />;
 
   if (!deals?.length) {
     return (
@@ -53,12 +54,13 @@ function DealsTab() {
 
 function ChannelsTab() {
   const navigate = useNavigate();
-  const { data: channels, isLoading } = useQuery({
+  const { data: channels, isLoading, isError } = useQuery({
     queryKey: ['my-channels'],
     queryFn: fetchMyChannels,
   });
 
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load channels" description="Check your connection and try again." />;
 
   return (
     <div>
@@ -117,12 +119,13 @@ function ChannelsTab() {
 
 function CampaignsTab() {
   const navigate = useNavigate();
-  const { data: campaigns, isLoading } = useQuery({
+  const { data: campaigns, isLoading, isError } = useQuery({
     queryKey: ['my-campaigns'],
     queryFn: fetchMyCampaigns,
   });
 
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load campaigns" description="Check your connection and try again." />;
 
   if (!campaigns?.length) {
     return (

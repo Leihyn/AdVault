@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Section, Cell, Button, Input, Placeholder, Spinner, Title, Text } from '@telegram-apps/telegram-ui';
+import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { fetchMe, updateMe } from '../api/client.js';
 import { useTelegram } from '../hooks/useTelegram.js';
+import { useToast } from '../hooks/useToast.js';
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Channel Owner',
@@ -15,10 +17,13 @@ export function Profile() {
   const { user: tgUser } = useTelegram();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [wallet, setWallet] = useState('');
   const [editing, setEditing] = useState(false);
+  const [tonConnectUI] = useTonConnectUI();
+  const tonWallet = useTonWallet();
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError } = useQuery({
     queryKey: ['me'],
     queryFn: fetchMe,
     enabled: !!tgUser,
@@ -32,7 +37,22 @@ export function Profile() {
     },
   });
 
+  // Auto-save wallet address when connected via TON Connect.
+  // Guard with ref to prevent double-fire (strict mode / re-renders).
+  const walletSaved = useRef(false);
+  useEffect(() => {
+    if (tonWallet && profile && !profile.tonWalletAddress && !walletSaved.current) {
+      const address = tonWallet.account.address;
+      if (address) {
+        walletSaved.current = true;
+        updateMutation.mutate({ tonWalletAddress: address });
+        showToast('Wallet connected', 'success');
+      }
+    }
+  }, [tonWallet, profile, updateMutation, showToast]);
+
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load profile" description="Check your connection and try again." />;
 
   const initial = profile?.firstName?.charAt(0)?.toUpperCase() || '?';
 
@@ -48,7 +68,7 @@ export function Profile() {
       </div>
 
       <Section header="Account">
-        <Cell after={<Text>{ROLE_LABELS[profile?.role] || profile?.role || '—'}</Text>}>Role</Cell>
+        <Cell after={<Text>{ROLE_LABELS[profile?.role] || profile?.role || '\u2014'}</Text>}>Role</Cell>
         <Cell multiline after={
           <Text style={{ fontSize: '12px', wordBreak: 'break-all' }}>
             {profile?.tonWalletAddress || 'Not set'}
@@ -57,19 +77,49 @@ export function Profile() {
       </Section>
 
       <Section header="Wallet">
+        {/* TON Connect button */}
+        <div style={{ padding: '16px' }}>
+          {tonWallet ? (
+            <div style={{
+              padding: '12px', borderRadius: '10px',
+              background: 'var(--tgui--secondary_bg_color)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <div>
+                <Text weight="2" style={{ fontSize: '13px', display: 'block' }}>Connected</Text>
+                <Text style={{ fontSize: '11px', color: 'var(--tgui--hint_color)', fontFamily: 'monospace' }}>
+                  {tonWallet.account.address.slice(0, 8)}...{tonWallet.account.address.slice(-6)}
+                </Text>
+              </div>
+              <Button size="s" mode="bezeled" onClick={() => tonConnectUI.disconnect()}>
+                Disconnect
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="l"
+              stretched
+              onClick={() => tonConnectUI.openModal()}
+            >
+              Connect TON Wallet
+            </Button>
+          )}
+        </div>
+
+        {/* Manual wallet address edit */}
         {!editing ? (
-          <div style={{ padding: '16px' }}>
+          <div style={{ padding: '0 16px 16px' }}>
             <Button
               size="l"
               stretched
               mode="bezeled"
               onClick={() => { setEditing(true); setWallet(profile?.tonWalletAddress || ''); }}
             >
-              Edit Wallet Address
+              Edit Wallet Address Manually
             </Button>
           </div>
         ) : (
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <Input
               placeholder="Your TON wallet address"
               value={wallet}

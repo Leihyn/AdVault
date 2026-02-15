@@ -39,7 +39,7 @@ export function ChannelDetail() {
   const [assets, setAssets] = useState<{ label: string; value: string }[]>([]);
   const [showAssets, setShowAssets] = useState(false);
 
-  const { data: channel, isLoading } = useQuery({
+  const { data: channel, isLoading, isError } = useQuery({
     queryKey: ['channel', id],
     queryFn: () => fetchChannel(Number(id)),
   });
@@ -67,6 +67,7 @@ export function ChannelDetail() {
   });
 
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load channel" description="Check your connection and try again." />;
   if (!channel) return <Placeholder header="Channel not found" description="This channel doesn't exist" />;
 
   const platform = channel.platform || 'TELEGRAM';

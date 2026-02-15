@@ -59,7 +59,7 @@ export function Channels() {
 
   const hasFilters = platform || language || category;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['channels', params],
     queryFn: () => fetchChannels(params),
   });
@@ -124,6 +124,9 @@ export function Channels() {
 
       {isLoading && (
         <Placeholder><Spinner size="m" /></Placeholder>
+      )}
+      {isError && (
+        <Placeholder header="Failed to load channels" description="Check your connection and try again." />
       )}
       {data?.channels?.length > 0 && (
         <Section>

@@ -28,7 +28,7 @@ export function Campaigns() {
   if (language) params.targetLanguage = language;
   if (category) params.targetCategory = category;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['campaigns', params],
     queryFn: () => fetchCampaigns(params),
   });
@@ -64,6 +64,9 @@ export function Campaigns() {
       </div>
 
       {isLoading && <Placeholder><Spinner size="m" /></Placeholder>}
+      {isError && (
+        <Placeholder header="Failed to load campaigns" description="Check your connection and try again." />
+      )}
       {data?.campaigns?.length > 0 && (
         <Section>
           {data.campaigns.map((campaign: any) => (

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Section, Cell, Button, Input, Placeholder, Spinner, Title, Text,
 } from '@telegram-apps/telegram-ui';
+import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import {
   fetchDeal, payDeal, cancelDeal, submitCreative,
   approveCreative, requestRevision, submitPostProof,
@@ -14,6 +15,7 @@ import {
 import { DealStatusBadge } from '../components/DealStatus.js';
 import { CreativeEditor } from '../components/CreativeEditor.js';
 import { useTelegram } from '../hooks/useTelegram.js';
+import { useToast } from '../hooks/useToast.js';
 
 const DEAL_STEPS = [
   { key: 'PENDING_PAYMENT', label: 'Pay' },
@@ -62,6 +64,9 @@ const REQ_STATUS_COLORS: Record<string, string> = {
 export function DealDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useTelegram();
+  const { showToast } = useToast();
+  const [tonConnectUI] = useTonConnectUI();
+  const wallet = useTonWallet();
   const queryClient = useQueryClient();
   const [revisionNotes, setRevisionNotes] = useState('');
   const [postProofUrl, setPostProofUrl] = useState('');
@@ -70,8 +75,59 @@ export function DealDetail() {
   const [evidenceText, setEvidenceText] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const { data: deal, isLoading } = useQuery({
+  const copyAddress = useCallback(async (address: string, event?: React.MouseEvent) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(true);
+      try { (window.Telegram?.WebApp as any)?.HapticFeedback?.notificationOccurred('success'); } catch {}
+      setTimeout(() => setCopiedAddress(false), 2000);
+    } catch {
+      // Fallback: select the clicked element's text
+      const el = (event?.currentTarget ?? document.querySelector('.address-block')) as HTMLElement;
+      if (el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+      }
+    }
+  }, []);
+
+  const [tonPayPending, setTonPayPending] = useState(false);
+
+  const sendTonPayment = useCallback(async (address: string, amountTon: string) => {
+    if (!wallet) {
+      await tonConnectUI.openModal();
+      return;
+    }
+    setTonPayPending(true);
+    try {
+      // Convert TON to nanotons (1 TON = 1e9 nanotons) using string math to avoid float precision loss
+      const [whole = '0', frac = ''] = amountTon.split('.');
+      const nanotons = (BigInt(whole) * 1_000_000_000n + BigInt(frac.padEnd(9, '0').slice(0, 9))).toString();
+      await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 300, // 5 min validity
+        messages: [
+          {
+            address,
+            amount: nanotons,
+          },
+        ],
+      });
+      showToast('Payment sent! Waiting for confirmation...', 'success');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Payment cancelled';
+      if (!msg.includes('cancel') && !msg.includes('reject')) {
+        showToast(msg, 'error');
+      }
+    } finally {
+      setTonPayPending(false);
+    }
+  }, [wallet, tonConnectUI, showToast]);
+
+  const { data: deal, isLoading, isError } = useQuery({
     queryKey: ['deal', id],
     queryFn: () => fetchDeal(Number(id)),
     refetchInterval: 10_000,
@@ -80,12 +136,13 @@ export function DealDetail() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['deal', id] });
 
   const payMutation = useMutation({ mutationFn: () => payDeal(Number(id)), onSuccess: invalidate });
-  const cancelMutation = useMutation({ mutationFn: () => cancelDeal(Number(id)), onSuccess: invalidate });
+  const cancelMutation = useMutation({ mutationFn: () => cancelDeal(Number(id)), onSuccess: (data) => { invalidate(); showToast(data?.status === 'REFUNDED' ? 'Deal cancelled — funds refunded' : 'Deal cancelled', 'info'); } });
   const creativeMutation = useMutation({
     mutationFn: (data: any) => submitCreative(Number(id), data),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); showToast('Creative submitted', 'success'); },
+    onError: (err: Error) => showToast(err.message || 'Failed to submit creative', 'error'),
   });
-  const approveMutation = useMutation({ mutationFn: () => approveCreative(Number(id)), onSuccess: invalidate });
+  const approveMutation = useMutation({ mutationFn: () => approveCreative(Number(id)), onSuccess: () => { invalidate(); showToast('Creative approved', 'success'); } });
   const revisionMutation = useMutation({
     mutationFn: () => requestRevision(Number(id), revisionNotes),
     onSuccess: invalidate,
@@ -131,6 +188,7 @@ export function DealDetail() {
   });
 
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load deal" description="Check your connection and try again." />;
   if (!deal) return <Placeholder header="Deal not found" />;
 
   const isAdvertiser = deal.isAdvertiser ?? false;
@@ -302,7 +360,10 @@ export function DealDetail() {
       {deal.escrowAddress && (
         <Section header="Escrow">
           <Cell multiline>
-            <div className="address-block">{deal.escrowAddress}</div>
+            <div className="address-block address-block--copyable" onClick={(e) => copyAddress(deal.escrowAddress, e)}>
+              {deal.escrowAddress}
+              <span className="address-block__hint">{copiedAddress ? 'Copied!' : 'Tap to copy'}</span>
+            </div>
           </Cell>
         </Section>
       )}
@@ -312,8 +373,29 @@ export function DealDetail() {
         <Section header="Payment">
           {payMutation.data?.address ? (
             <div style={{ padding: '16px' }}>
+              {/* TON Connect one-tap payment */}
+              <Button
+                size="l"
+                stretched
+                onClick={() => sendTonPayment(payMutation.data.address, deal.amountTon)}
+                loading={tonPayPending}
+                style={{ marginBottom: '12px' }}
+              >
+                {wallet ? `Pay ${deal.amountTon} TON` : 'Connect Wallet & Pay'}
+              </Button>
+
+              <div style={{
+                textAlign: 'center', fontSize: '12px', color: 'var(--tgui--hint_color)',
+                margin: '4px 0 12px',
+              }}>
+                or send manually:
+              </div>
+
               <Text>Send exactly <strong>{deal.amountTon} TON</strong> to:</Text>
-              <div className="address-block">{payMutation.data.address}</div>
+              <div className="address-block address-block--copyable" onClick={(e) => copyAddress(payMutation.data.address, e)}>
+                {payMutation.data.address}
+                <span className="address-block__hint">{copiedAddress ? 'Copied!' : 'Tap to copy'}</span>
+              </div>
               <div className="callout callout--info" style={{ margin: '12px 0 0' }}>
                 Payment is automatically detected. This page refreshes every 10s.
               </div>
@@ -342,6 +424,11 @@ export function DealDetail() {
               loading={creativeMutation.isPending}
               initial={latestCreative ? { contentText: latestCreative.contentText, mediaUrl: latestCreative.mediaUrl } : undefined}
             />
+            {creativeMutation.isError && (
+              <div className="callout callout--error" style={{ marginTop: '8px' }}>
+                {(creativeMutation.error as Error).message}
+              </div>
+            )}
           </div>
         </Section>
       )}

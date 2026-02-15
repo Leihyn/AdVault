@@ -6,7 +6,7 @@ import { fetchMyChannels } from '../api/client.js';
 
 export function MyChannels() {
   const navigate = useNavigate();
-  const { data: channels, isLoading } = useQuery({
+  const { data: channels, isLoading, isError } = useQuery({
     queryKey: ['my-channels'],
     queryFn: fetchMyChannels,
   });
@@ -28,6 +28,9 @@ export function MyChannels() {
         <Placeholder>
           <Spinner size="m" />
         </Placeholder>
+      )}
+      {isError && (
+        <Placeholder header="Failed to load channels" description="Check your connection and try again." />
       )}
       {channels?.length > 0 && (
         <Section>

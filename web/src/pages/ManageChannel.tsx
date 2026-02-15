@@ -48,7 +48,7 @@ export function ManageChannel() {
   const [verifyData, setVerifyData] = useState<{ token: string; verifyUrl: string; instructions: string } | null>(null);
   const [verifyResult, setVerifyResult] = useState<{ verified: boolean } | null>(null);
 
-  const { data: channel, isLoading } = useQuery({
+  const { data: channel, isLoading, isError } = useQuery({
     queryKey: ['channel', id],
     queryFn: () => fetchChannel(Number(id)),
   });
@@ -124,6 +124,7 @@ export function ManageChannel() {
   });
 
   if (isLoading) return <Placeholder><Spinner size="m" /></Placeholder>;
+  if (isError) return <Placeholder header="Failed to load channel" description="Check your connection and try again." />;
   if (!channel) return <Placeholder header="Channel not found" />;
 
   const platform = channel.platform || 'TELEGRAM';

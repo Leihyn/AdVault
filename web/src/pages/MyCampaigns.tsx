@@ -5,7 +5,7 @@ import { fetchMyCampaigns } from '../api/client.js';
 import { CampaignCard } from '../components/CampaignCard.js';
 
 export function MyCampaigns() {
-  const { data: campaigns, isLoading } = useQuery({
+  const { data: campaigns, isLoading, isError } = useQuery({
     queryKey: ['my-campaigns'],
     queryFn: fetchMyCampaigns,
   });
@@ -22,6 +22,9 @@ export function MyCampaigns() {
         <Placeholder>
           <Spinner size="m" />
         </Placeholder>
+      )}
+      {isError && (
+        <Placeholder header="Failed to load campaigns" description="Check your connection and try again." />
       )}
       {campaigns?.length > 0 && (
         <Section>
