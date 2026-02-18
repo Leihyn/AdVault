@@ -5,6 +5,5 @@ dist/
 *.tsbuildinfo
 .DS_Store
 server/prisma/*.db
-server/prisma/migrations/
 SUBMISSION.md
 demo-video/
