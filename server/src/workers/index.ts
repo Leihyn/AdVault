@@ -35,6 +35,15 @@ export function createWorkers(bot: Bot) {
   platformRegistry.register(new InstagramAdapter());
   platformRegistry.register(new TwitterAdapter());
   platformRegistry.register(new TikTokAdapter());
+
+  if (!config.REDIS_URL) {
+    console.warn('REDIS_URL not set — background workers disabled');
+    return {
+      scheduleJobs: async () => { console.log('Worker schedules skipped (no Redis)'); },
+      shutdown: async () => {},
+    };
+  }
+
   const connection = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
 
   // Queues
