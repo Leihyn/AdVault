@@ -11,6 +11,7 @@ FROM node:20-slim AS server-build
 WORKDIR /app/server
 COPY server/package*.json ./
 RUN npm install --legacy-peer-deps
+ARG CACHEBUST=1
 COPY server/ ./
 RUN npx prisma generate
 RUN npm run build
