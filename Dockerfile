@@ -37,4 +37,4 @@ ENV PORT=3000
 EXPOSE 3000
 
 WORKDIR /app/server
-CMD ["node", "dist/index.js"]
+CMD npx prisma migrate deploy && node dist/index.js
