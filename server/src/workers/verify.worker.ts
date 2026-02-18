@@ -24,7 +24,7 @@ const LOCK_TTL_MS = 30_000;
  * 6. Otherwise → do nothing (check again next cycle)
  */
 export function createVerifyProcessor(bot: Bot) {
-  const redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+  const redis = new IORedis(config.REDIS_URL!, { maxRetriesPerRequest: null });
 
   return async function processVerify(_job: Job) {
     const deals = await getTrackingDeals();

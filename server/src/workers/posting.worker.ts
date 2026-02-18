@@ -18,7 +18,7 @@ const LOCK_TTL_MS = 30_000;
  * Transitions: CREATIVE_APPROVED -> POSTED -> TRACKING
  */
 export function createPostingProcessor(bot: Bot) {
-  const redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+  const redis = new IORedis(config.REDIS_URL!, { maxRetriesPerRequest: null });
 
   return async function processPosting(_job: Job) {
     const deals = await prisma.deal.findMany({

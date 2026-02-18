@@ -15,7 +15,7 @@ const MAX_PER_CYCLE = 50;
  * for channels where statsUpdatedAt is null or older than 6 hours.
  */
 export function createStatsRefreshProcessor(bot: Bot) {
-  const redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+  const redis = new IORedis(config.REDIS_URL!, { maxRetriesPerRequest: null });
 
   return async function processStatsRefresh(_job: Job) {
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);

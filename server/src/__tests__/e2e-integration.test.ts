@@ -114,7 +114,7 @@ describe('Redis Integration', () => {
   let redis: IORedis;
 
   beforeAll(() => {
-    redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+    redis = new IORedis(config.REDIS_URL!, { maxRetriesPerRequest: null });
   });
 
   afterAll(async () => {
@@ -332,7 +332,7 @@ describe('Server Startup Smoke Test', () => {
   });
 
   it('Workers can connect to Redis without crashing', async () => {
-    const redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+    const redis = new IORedis(config.REDIS_URL!, { maxRetriesPerRequest: null });
     const { Queue } = await import('bullmq');
 
     // Create a queue (like workers/index.ts does)
